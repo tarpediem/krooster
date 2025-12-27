@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Calendar,
   Users,
   CalendarOff,
   MessageSquare,
-  ChefHat,
   MapPin,
   ArrowRight,
   Sparkles,
@@ -107,8 +107,8 @@ export default function WelcomePage() {
         <div className="absolute inset-0 bg-grid-pattern opacity-5" />
         <div className="relative">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-primary text-primary-foreground shadow-lg">
-              <ChefHat className="h-9 w-9" />
+            <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-white shadow-lg p-2">
+              <Image src="/logo.png" alt="Krooster" width={72} height={72} />
             </div>
           </div>
           <h1 className="text-4xl font-bold text-center sm:text-5xl mb-4">

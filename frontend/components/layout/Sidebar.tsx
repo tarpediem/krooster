@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import {
   Calendar,
   Users,
@@ -10,7 +11,6 @@ import {
   MessageSquare,
   Menu,
   X,
-  ChefHat,
   Home,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,7 @@ export function Sidebar() {
     <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
       <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r bg-background px-6 pb-4">
         <div className="flex h-16 shrink-0 items-center gap-2">
-          <ChefHat className="h-8 w-8 text-primary" />
+          <Image src="/logo.png" alt="Krooster" width={40} height={40} className="dark:invert" />
           <span className="text-xl font-bold">Krooster</span>
         </div>
         <NavLinks />
@@ -92,7 +92,7 @@ export function MobileNav() {
         <SheetContent side="left" className="w-72 p-0">
           <div className="flex h-full flex-col">
             <div className="flex h-16 items-center gap-2 px-6">
-              <ChefHat className="h-8 w-8 text-primary" />
+              <Image src="/logo.png" alt="Krooster" width={40} height={40} className="dark:invert" />
               <span className="text-xl font-bold">Krooster</span>
             </div>
             <div className="flex-1 px-4">
@@ -112,7 +112,7 @@ export function MobileNav() {
         </SheetContent>
       </Sheet>
       <div className="flex-1 flex items-center gap-2">
-        <ChefHat className="h-6 w-6 text-primary" />
+        <Image src="/logo.png" alt="Krooster" width={28} height={28} className="dark:invert" />
         <span className="font-semibold">Krooster</span>
       </div>
     </div>

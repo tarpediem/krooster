@@ -161,7 +161,7 @@ HAVING COUNT(DISTINCT s.employee_id) < 3;
 -- Restaurants
 INSERT INTO restaurants (name, location, address) VALUES
     ('A la mer by Kosmo', 'Hua Hin Beachfront', '174/1 Naresdamri Rd, Hua Hin 77110'),
-    ('Kosmo', 'Sathorn, Bangkok', 'Sathorn, Bangkok');
+    ('Kosmo', 'Sathorn, Bangkok', '199/1 Sathon Soi 12, Si Lom, Bang Rak, Bangkok 10500');
 
 -- Test employees
 INSERT INTO employees (last_name, first_name, phone, restaurant_id, is_mobile, positions, hire_date) VALUES

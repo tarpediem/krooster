@@ -58,6 +58,9 @@ services:
       - "5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       postgres:
         condition: service_healthy

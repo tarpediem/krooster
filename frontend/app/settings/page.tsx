@@ -370,9 +370,18 @@ export default function SettingsPage() {
                 <Label htmlFor="provider">Provider</Label>
                 <Select
                   value={llmConfig.provider}
-                  onValueChange={(value: 'cerebras' | 'ollama') =>
-                    setLlmConfig({ ...llmConfig, provider: value })
-                  }
+                  onValueChange={(value: 'cerebras' | 'ollama') => {
+                    const newConfig = { ...llmConfig, provider: value };
+                    // Auto-set API URL and model when switching providers
+                    if (value === 'cerebras') {
+                      newConfig.api_url = 'https://api.cerebras.ai/v1';
+                      newConfig.model = 'llama-3.3-70b';
+                    } else {
+                      newConfig.api_url = 'http://host.docker.internal:11434';
+                      newConfig.model = 'mistral';
+                    }
+                    setLlmConfig(newConfig);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select provider" />

@@ -1,0 +1,489 @@
+{
+  "name": "Leave Requests Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/leave",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-request-leave",
+      "name": "Webhook Request Leave",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        100
+      ],
+      "webhookId": "leave-request"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/leave/approve",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-approve-leave",
+      "name": "Webhook Approve Leave",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        400
+      ],
+      "webhookId": "leave-approve"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/leave/reject",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-reject-leave",
+      "name": "Webhook Reject Leave",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        800
+      ],
+      "webhookId": "leave-reject"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO absences (\n  employee_id,\n  type,\n  start_date,\n  end_date,\n  status,\n  comment\n)\nVALUES (\n  {{ $json.body.employee_id }},\n  '{{ $json.body.type || 'paid_leave' }}',\n  '{{ $json.body.start_date }}'::DATE,\n  '{{ $json.body.end_date }}'::DATE,\n  'requested',\n  {{ $json.body.comment ? \"'\" + $json.body.comment + \"'\" : 'NULL' }}\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-create-leave",
+      "name": "Create Leave Request",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Leave request submitted', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-create-leave",
+      "name": "Respond Create Leave",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  a.*,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  (a.end_date - a.start_date + 1) as days_requested,\n  COALESCE(lb.days_accrued, 0) - COALESCE(lb.days_taken, 0) as available_balance\nFROM absences a\nJOIN employees e ON a.employee_id = e.id\nLEFT JOIN leave_balance lb ON lb.employee_id = a.employee_id AND lb.year = EXTRACT(YEAR FROM CURRENT_DATE)\nWHERE a.id = {{ $json.query.id }};",
+        "options": {}
+      },
+      "id": "get-leave-details",
+      "name": "Get Leave Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.available_balance }}",
+              "operation": "largerEqual",
+              "value2": "={{ $json.days_requested }}"
+            }
+          ]
+        }
+      },
+      "id": "if-sufficient-balance",
+      "name": "If Sufficient Balance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH update_absence AS (\n  UPDATE absences \n  SET \n    status = 'approved',\n    validated_by = '{{ $json.body.validated_by || 'Manager' }}',\n    validation_date = CURRENT_TIMESTAMP\n  WHERE id = {{ $json.query.id }}\n  RETURNING *\n),\nupdate_balance AS (\n  UPDATE leave_balance \n  SET days_taken = days_taken + (\n    SELECT (end_date - start_date + 1) FROM update_absence\n  )\n  WHERE employee_id = (SELECT employee_id FROM update_absence)\n  AND year = EXTRACT(YEAR FROM CURRENT_DATE)\n)\nSELECT * FROM update_absence;",
+        "options": {}
+      },
+      "id": "postgres-approve-leave",
+      "name": "Approve Leave",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        960,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Leave approved', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-approve-success",
+      "name": "Respond Approve Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1180,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Insufficient leave balance', details: { requested: $('Get Leave Details').item.json.days_requested, available: $('Get Leave Details').item.json.available_balance } } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "respond-insufficient-balance",
+      "name": "Respond Insufficient Balance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE absences \nSET \n  status = 'rejected',\n  validated_by = '{{ $json.body.validated_by || 'Manager' }}',\n  validation_date = CURRENT_TIMESTAMP,\n  comment = COALESCE(comment, '') || ' | Rejection: {{ $json.body.reason || 'Not specified' }}'\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-reject-leave",
+      "name": "Reject Leave",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Leave rejected', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-reject",
+      "name": "Respond Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/leave",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list-leave",
+      "name": "Webhook List Leave",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        1000
+      ],
+      "webhookId": "leave-list"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  a.*,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  r.name as restaurant_name,\n  (a.end_date - a.start_date + 1) as days_requested\nFROM absences a\nJOIN employees e ON a.employee_id = e.id\nLEFT JOIN restaurants r ON e.restaurant_id = r.id\nWHERE 1=1\n{{ $json.query.employee_id ? \"AND a.employee_id = \" + $json.query.employee_id : '' }}\n{{ $json.query.status ? \"AND a.status = '\" + $json.query.status + \"'\" : '' }}\n{{ $json.query.type ? \"AND a.type = '\" + $json.query.type + \"'\" : '' }}\nORDER BY a.start_date DESC;",
+        "options": {}
+      },
+      "id": "postgres-list-leave",
+      "name": "List Leave Requests",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        1000
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json) } }}",
+        "options": {}
+      },
+      "id": "respond-list-leave",
+      "name": "Respond List Leave",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/leave/balance/:employee_id",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-get-balance",
+      "name": "Webhook Get Balance",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        1200
+      ],
+      "webhookId": "leave-balance"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  e.id as employee_id,\n  e.last_name,\n  e.first_name,\n  COALESCE(lb.days_accrued, 0) as days_accrued,\n  COALESCE(lb.days_taken, 0) as days_taken,\n  COALESCE(lb.days_accrued, 0) - COALESCE(lb.days_taken, 0) as available_balance,\n  lb.year\nFROM employees e\nLEFT JOIN leave_balance lb ON lb.employee_id = e.id AND lb.year = EXTRACT(YEAR FROM CURRENT_DATE)\nWHERE e.id = {{ $json.query.employee_id }};",
+        "options": {}
+      },
+      "id": "postgres-get-balance",
+      "name": "Get Leave Balance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        1200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-get-balance",
+      "name": "Respond Get Balance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        1200
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Request Leave": {
+      "main": [
+        [
+          {
+            "node": "Create Leave Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Leave Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Create Leave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Approve Leave": {
+      "main": [
+        [
+          {
+            "node": "Get Leave Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leave Details": {
+      "main": [
+        [
+          {
+            "node": "If Sufficient Balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Sufficient Balance": {
+      "main": [
+        [
+          {
+            "node": "Approve Leave",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Insufficient Balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Leave": {
+      "main": [
+        [
+          {
+            "node": "Respond Approve Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Reject Leave": {
+      "main": [
+        [
+          {
+            "node": "Reject Leave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Leave": {
+      "main": [
+        [
+          {
+            "node": "Respond Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook List Leave": {
+      "main": [
+        [
+          {
+            "node": "List Leave Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Leave Requests": {
+      "main": [
+        [
+          {
+            "node": "Respond List Leave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Get Balance": {
+      "main": [
+        [
+          {
+            "node": "Get Leave Balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leave Balance": {
+      "main": [
+        [
+          {
+            "node": "Respond Get Balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "leave",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "absences",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 5,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: docker.io/postgres:16-alpine
+    container_name: planning-postgres
+    environment:
+      POSTGRES_DB: planning
+      POSTGRES_USER: planning
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planning -d planning"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nocodb:
+    image: docker.io/nocodb/nocodb:latest
+    container_name: planning-nocodb
+    environment:
+      NC_DB: "pg://postgres:5432?u=planning&p=${POSTGRES_PASSWORD}&d=planning"
+    ports:
+      - "8080:8080"
+    volumes:
+      - nocodb_data:/usr/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ollama:
+    image: docker.io/ollama/ollama:rocm
+    container_name: planning-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    group_add:
+      - "985"
+      - "989"
+
+  n8n:
+    image: docker.io/n8nio/n8n:latest
+    container_name: planning-n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=planning
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - N8N_HOST=localhost
+      - WEBHOOK_URL=http://localhost:5678/
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: planning-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5678/webhook
+    ports:
+      - "3000:3000"
+    depends_on:
+      - n8n
+
+volumes:
+  postgres_data:
+  nocodb_data:
+  ollama_data:
+  n8n_data:

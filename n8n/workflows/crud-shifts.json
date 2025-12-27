@@ -1,0 +1,413 @@
+{
+  "name": "CRUD Shifts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/shifts",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-create-shift",
+      "name": "Webhook Create Shift",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        100
+      ],
+      "webhookId": "shifts-create"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/shifts",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list-shifts",
+      "name": "Webhook List Shifts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        400
+      ],
+      "webhookId": "shifts-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/shifts/update",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-update-shift",
+      "name": "Webhook Update Shift",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        600
+      ],
+      "webhookId": "shifts-update"
+    },
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "api/shifts/delete",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-delete-shift",
+      "name": "Webhook Cancel Shift",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        800
+      ],
+      "webhookId": "shifts-delete"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  CASE \n    WHEN EXISTS (\n      SELECT 1 FROM absences \n      WHERE employee_id = {{ $json.body.employee_id }}\n      AND status = 'approved'\n      AND '{{ $json.body.date }}'::DATE BETWEEN start_date AND end_date\n    ) THEN 'CONFLICT_LEAVE'\n    WHEN EXISTS (\n      SELECT 1 FROM shifts \n      WHERE employee_id = {{ $json.body.employee_id }}\n      AND date = '{{ $json.body.date }}'::DATE\n      AND status != 'cancelled'\n      AND (\n        ('{{ $json.body.start_time }}'::TIME, '{{ $json.body.end_time }}'::TIME) \n        OVERLAPS (start_time, end_time)\n      )\n    ) THEN 'CONFLICT_SHIFT'\n    ELSE 'OK'\n  END as conflict_check;",
+        "options": {}
+      },
+      "id": "check-conflicts",
+      "name": "Check Conflicts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.conflict_check }}",
+              "value2": "OK"
+            }
+          ]
+        }
+      },
+      "id": "if-no-conflict",
+      "name": "If No Conflict",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        720,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO shifts (\n  employee_id, \n  restaurant_id, \n  date, \n  start_time, \n  end_time, \n  break_start,\n  break_duration,\n  position, \n  is_mission, \n  status, \n  notes\n)\nVALUES (\n  {{ $('Webhook Create Shift').item.json.body.employee_id }},\n  {{ $('Webhook Create Shift').item.json.body.restaurant_id }},\n  '{{ $('Webhook Create Shift').item.json.body.date }}'::DATE,\n  '{{ $('Webhook Create Shift').item.json.body.start_time }}'::TIME,\n  '{{ $('Webhook Create Shift').item.json.body.end_time }}'::TIME,\n  {{ $('Webhook Create Shift').item.json.body.break_start ? \"'\" + $('Webhook Create Shift').item.json.body.break_start + \"'::TIME\" : 'NULL' }},\n  {{ $('Webhook Create Shift').item.json.body.break_duration || 30 }},\n  '{{ $('Webhook Create Shift').item.json.body.position || 'service' }}',\n  {{ $('Webhook Create Shift').item.json.body.is_mission || false }},\n  '{{ $('Webhook Create Shift').item.json.body.status || 'scheduled' }}',\n  {{ $('Webhook Create Shift').item.json.body.notes ? \"'\" + $('Webhook Create Shift').item.json.body.notes + \"'\" : 'NULL' }}\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-create-shift",
+      "name": "Create Shift",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        940,
+        60
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-create-success",
+      "name": "Respond Create Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: $('Check Conflicts').item.json.conflict_check === 'CONFLICT_LEAVE' ? 'Employee is on approved leave for this date' : 'Employee has an overlapping shift on this date' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "respond-conflict",
+      "name": "Respond Conflict",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  s.*,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  r.name as restaurant_name\nFROM shifts s\nJOIN employees e ON s.employee_id = e.id\nJOIN restaurants r ON s.restaurant_id = r.id\nWHERE 1=1\n{{ $json.query.date ? \"AND s.date = '\" + $json.query.date + \"'::DATE\" : '' }}\n{{ $json.query.date_from ? \"AND s.date >= '\" + $json.query.date_from + \"'::DATE\" : '' }}\n{{ $json.query.date_to ? \"AND s.date <= '\" + $json.query.date_to + \"'::DATE\" : '' }}\n{{ $json.query.restaurant_id ? \"AND s.restaurant_id = \" + $json.query.restaurant_id : '' }}\n{{ $json.query.employee_id ? \"AND s.employee_id = \" + $json.query.employee_id : '' }}\nAND s.status != 'cancelled'\nORDER BY s.date, s.start_time;",
+        "options": {}
+      },
+      "id": "postgres-list-shifts",
+      "name": "List Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json) } }}",
+        "options": {}
+      },
+      "id": "respond-list-shifts",
+      "name": "Respond List Shifts",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE shifts SET\n  employee_id = COALESCE({{ $json.body.employee_id || 'NULL' }}, employee_id),\n  restaurant_id = COALESCE({{ $json.body.restaurant_id || 'NULL' }}, restaurant_id),\n  date = COALESCE({{ $json.body.date ? \"'\" + $json.body.date + \"'::DATE\" : 'NULL' }}, date),\n  start_time = COALESCE({{ $json.body.start_time ? \"'\" + $json.body.start_time + \"'::TIME\" : 'NULL' }}, start_time),\n  end_time = COALESCE({{ $json.body.end_time ? \"'\" + $json.body.end_time + \"'::TIME\" : 'NULL' }}, end_time),\n  position = COALESCE({{ $json.body.position ? \"'\" + $json.body.position + \"'\" : 'NULL' }}, position),\n  status = COALESCE({{ $json.body.status ? \"'\" + $json.body.status + \"'\" : 'NULL' }}, status),\n  notes = COALESCE({{ $json.body.notes ? \"'\" + $json.body.notes + \"'\" : 'NULL' }}, notes)\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-update-shift",
+      "name": "Update Shift",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-update-shift",
+      "name": "Respond Update Shift",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE shifts SET status = 'cancelled' WHERE id = {{ $json.query.id }} RETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-cancel-shift",
+      "name": "Cancel Shift",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Shift cancelled', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-cancel-shift",
+      "name": "Respond Cancel Shift",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        800
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Create Shift": {
+      "main": [
+        [
+          {
+            "node": "Check Conflicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Conflicts": {
+      "main": [
+        [
+          {
+            "node": "If No Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If No Conflict": {
+      "main": [
+        [
+          {
+            "node": "Create Shift",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Shift": {
+      "main": [
+        [
+          {
+            "node": "Respond Create Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook List Shifts": {
+      "main": [
+        [
+          {
+            "node": "List Shifts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Shifts": {
+      "main": [
+        [
+          {
+            "node": "Respond List Shifts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Update Shift": {
+      "main": [
+        [
+          {
+            "node": "Update Shift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Shift": {
+      "main": [
+        [
+          {
+            "node": "Respond Update Shift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Cancel Shift": {
+      "main": [
+        [
+          {
+            "node": "Cancel Shift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Shift": {
+      "main": [
+        [
+          {
+            "node": "Respond Cancel Shift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "shifts",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "crud",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 4,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

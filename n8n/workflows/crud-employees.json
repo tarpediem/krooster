@@ -1,0 +1,326 @@
+{
+  "name": "CRUD Employees",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/employees",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-create",
+      "name": "Webhook Create",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        100
+      ],
+      "webhookId": "employees-create"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/employees",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list",
+      "name": "Webhook List",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "employees-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/employees/update",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-update",
+      "name": "Webhook Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        500
+      ],
+      "webhookId": "employees-update"
+    },
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "api/employees/delete",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-delete",
+      "name": "Webhook Delete",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        700
+      ],
+      "webhookId": "employees-delete"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO employees (last_name, first_name, phone, email, restaurant_id, is_mobile, positions, active, hire_date)\nVALUES (\n  '{{ $json.body.last_name }}',\n  '{{ $json.body.first_name }}',\n  '{{ $json.body.phone }}',\n  '{{ $json.body.email }}',\n  {{ $json.body.restaurant_id }},\n  {{ $json.body.is_mobile || false }},\n  ARRAY[{{ $json.body.positions ? $json.body.positions.map(p => \"'\" + p + \"'\").join(',') : '' }}]::TEXT[],\n  {{ $json.body.active !== false }},\n  {{ $json.body.hire_date ? \"'\" + $json.body.hire_date + \"'\" : 'CURRENT_DATE' }}\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-create",
+      "name": "Create Employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.*, r.name as restaurant_name\nFROM employees e\nLEFT JOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = TRUE\nORDER BY e.last_name, e.first_name;",
+        "options": {}
+      },
+      "id": "postgres-list",
+      "name": "List Employees",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE employees SET\n  last_name = CASE WHEN '{{ $json.body.last_name || '' }}' = '' THEN last_name ELSE '{{ $json.body.last_name }}' END,\n  first_name = CASE WHEN '{{ $json.body.first_name || '' }}' = '' THEN first_name ELSE '{{ $json.body.first_name }}' END,\n  phone = CASE WHEN '{{ $json.body.phone || '' }}' = '' THEN phone ELSE '{{ $json.body.phone }}' END,\n  email = CASE WHEN '{{ $json.body.email || '' }}' = '' THEN email ELSE '{{ $json.body.email }}' END\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-update",
+      "name": "Update Employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE employees SET active = FALSE WHERE id = {{ $json.query.id }} RETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-delete",
+      "name": "Soft Delete Employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-create",
+      "name": "Respond Create",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json) } }}",
+        "options": {}
+      },
+      "id": "respond-list",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-update",
+      "name": "Respond Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Employee deactivated', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-delete",
+      "name": "Respond Delete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Create": {
+      "main": [
+        [
+          {
+            "node": "Create Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook List": {
+      "main": [
+        [
+          {
+            "node": "List Employees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Update": {
+      "main": [
+        [
+          {
+            "node": "Update Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Delete": {
+      "main": [
+        [
+          {
+            "node": "Soft Delete Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Employee": {
+      "main": [
+        [
+          {
+            "node": "Respond Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Employees": {
+      "main": [
+        [
+          {
+            "node": "Respond List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Employee": {
+      "main": [
+        [
+          {
+            "node": "Respond Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soft Delete Employee": {
+      "main": [
+        [
+          {
+            "node": "Respond Delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "employees",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "crud",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 4,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

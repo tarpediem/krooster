@@ -1,0 +1,104 @@
+{
+  "name": "AI Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/ai/ask",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "ai-ask"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT json_build_object(\n  'employees', (SELECT json_agg(row_to_json(e)) FROM (\n    SELECT id, last_name, first_name, positions, is_mobile, active, restaurant_id FROM employees WHERE active = true\n  ) e),\n  'restaurants', (SELECT json_agg(row_to_json(r)) FROM restaurants r),\n  'shifts', (SELECT json_agg(row_to_json(s)) FROM (\n    SELECT s.id, s.date, s.start_time, s.end_time, s.position, s.status, s.is_mission,\n           s.employee_id, s.restaurant_id\n    FROM shifts s WHERE s.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '14 days'\n  ) s),\n  'absences', (SELECT json_agg(row_to_json(a)) FROM (\n    SELECT a.id, a.type, a.start_date, a.end_date, a.status, a.employee_id\n    FROM absences a WHERE a.end_date >= CURRENT_DATE AND a.status = 'approved'\n  ) a)\n) AS context;",
+        "options": {}
+      },
+      "id": "fetch-context",
+      "name": "Fetch All Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhookData = $('Webhook Trigger').first().json;\nconst dbContext = $input.first().json.context || {};\n\nconst question = webhookData.body?.question || 'No question provided';\n\nconst systemPrompt = `You are the scheduling assistant for two restaurants:\n\n- Hua Hin: seaside restaurant\n- Sathorn: Bangkok restaurant\n- Distance: 200km apart\n\n3-4 mobile employees can work at either site.\n\nBUSINESS RULES:\n- Maximum shift: 8h/day\n- Break: 30min for shifts > 5h\n- Rest between shifts: 11h minimum\n- Missions: max 2 per month per mobile employee\n\nBe concise. Use lists. Report alerts first.`;\n\nconst userMessage = `Current data:\\n${JSON.stringify(dbContext, null, 2)}\\n\\nQuestion: ${question}`;\n\nreturn {\n  systemPrompt,\n  userMessage,\n  originalQuestion: question\n};"
+      },
+      "id": "prepare-prompt",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://planning-ollama:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"mistral\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": {{ JSON.stringify($json.systemPrompt) }}},\n    {\"role\": \"user\", \"content\": {{ JSON.stringify($json.userMessage) }}}\n  ],\n  \"stream\": false\n}",
+        "options": {"timeout": 120000}
+      },
+      "id": "call-ollama",
+      "name": "Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ollamaResponse = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.originalQuestion;\n\nlet aiContent = ollamaResponse?.message?.content || ollamaResponse?.response || 'Sorry, I could not generate a response.';\n\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  model: ollamaResponse?.model || 'mistral',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Fetch All Context", "type": "main", "index": 0}]]
+    },
+    "Fetch All Context": {
+      "main": [[{"node": "Prepare Prompt", "type": "main", "index": 0}]]
+    },
+    "Prepare Prompt": {
+      "main": [[{"node": "Call Ollama", "type": "main", "index": 0}]]
+    },
+    "Call Ollama": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    },
+    "Format Response": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "triggerCount": 1,
+  "active": true
+}

@@ -1,0 +1,315 @@
+{
+  "name": "Daily Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 8AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Check understaffing for next 3 days (< 3 employees per restaurant per day)\nWITH dates AS (\n  SELECT generate_series(\n    CURRENT_DATE,\n    CURRENT_DATE + INTERVAL '2 days',\n    INTERVAL '1 day'\n  )::date AS check_date\n),\nrestaurants_list AS (\n  SELECT id, name FROM restaurants\n),\nshift_counts AS (\n  SELECT \n    s.date,\n    s.restaurant_id,\n    COUNT(DISTINCT s.employee_id) AS employee_count\n  FROM shifts s\n  WHERE s.status != 'cancelled'\n  AND s.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '2 days'\n  GROUP BY s.date, s.restaurant_id\n)\nSELECT \n  d.check_date AS date,\n  r.name AS restaurant,\n  COALESCE(sc.employee_count, 0) AS employee_count,\n  3 AS minimum_required,\n  CASE \n    WHEN COALESCE(sc.employee_count, 0) = 0 THEN 'CRITICAL: No employee scheduled'\n    WHEN COALESCE(sc.employee_count, 0) < 3 THEN 'ALERT: Understaffed'\n    ELSE 'OK'\n  END AS status\nFROM dates d\nCROSS JOIN restaurants_list r\nLEFT JOIN shift_counts sc ON sc.date = d.check_date AND sc.restaurant_id = r.id\nWHERE COALESCE(sc.employee_count, 0) < 3\nORDER BY d.check_date, r.name;",
+        "options": {}
+      },
+      "id": "check-understaffing",
+      "name": "Check Understaffing (3 days)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 140],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Check shifts without breaks (> 5h duration without pause)\nSELECT \n  s.id AS shift_id,\n  s.date,\n  e.last_name AS employee_last_name,\n  e.first_name AS employee_first_name,\n  r.name AS restaurant,\n  s.start_time,\n  s.end_time,\n  EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 AS duration_hours,\n  s.break_start,\n  s.break_duration,\n  CASE \n    WHEN s.break_start IS NULL AND EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 > 5 \n    THEN 'ALERT: Shift > 5h without break'\n    ELSE 'OK'\n  END AS status\nFROM shifts s\nJOIN employees e ON s.employee_id = e.id\nJOIN restaurants r ON s.restaurant_id = r.id\nWHERE s.status != 'cancelled'\nAND s.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'\nAND s.break_start IS NULL\nAND EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 > 5\nORDER BY s.date, r.name;",
+        "options": {}
+      },
+      "id": "check-missing-breaks",
+      "name": "Check Missing Breaks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Check employees over 40h this week\nWITH week_start AS (\n  SELECT date_trunc('week', CURRENT_DATE)::date AS start_date\n),\nweekly_hours AS (\n  SELECT \n    e.id AS employee_id,\n    e.last_name,\n    e.first_name,\n    r.name AS restaurant,\n    SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600) AS total_hours\n  FROM shifts s\n  JOIN employees e ON s.employee_id = e.id\n  JOIN restaurants r ON e.restaurant_id = r.id\n  CROSS JOIN week_start ws\n  WHERE s.status != 'cancelled'\n  AND s.date >= ws.start_date\n  AND s.date < ws.start_date + INTERVAL '7 days'\n  GROUP BY e.id, e.last_name, e.first_name, r.name\n)\nSELECT \n  employee_id,\n  last_name,\n  first_name,\n  restaurant,\n  ROUND(total_hours::numeric, 1) AS weekly_hours,\n  40 AS legal_limit,\n  ROUND((total_hours - 40)::numeric, 1) AS overtime,\n  'ALERT: Weekly hours exceeded' AS status\nFROM weekly_hours\nWHERE total_hours > 40\nORDER BY total_hours DESC;",
+        "options": {}
+      },
+      "id": "check-overtime",
+      "name": "Check Weekly Overtime (40h)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 460],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Check for conflicting shifts (same employee, same day, different restaurants)\nSELECT \n  e.id AS employee_id,\n  e.last_name,\n  e.first_name,\n  s1.date,\n  r1.name AS restaurant_1,\n  s1.start_time AS start_1,\n  s1.end_time AS end_1,\n  r2.name AS restaurant_2,\n  s2.start_time AS start_2,\n  s2.end_time AS end_2,\n  'CRITICAL: Shift conflict' AS status\nFROM shifts s1\nJOIN shifts s2 ON s1.employee_id = s2.employee_id \n  AND s1.date = s2.date \n  AND s1.id < s2.id\n  AND s1.restaurant_id != s2.restaurant_id\nJOIN employees e ON s1.employee_id = e.id\nJOIN restaurants r1 ON s1.restaurant_id = r1.id\nJOIN restaurants r2 ON s2.restaurant_id = r2.id\nWHERE s1.status != 'cancelled' AND s2.status != 'cancelled'\nAND s1.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'\nORDER BY s1.date;",
+        "options": {}
+      },
+      "id": "check-conflicts",
+      "name": "Check Shift Conflicts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 620],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all alerts from different checks\nconst understaffing = $('Check Understaffing (3 days)').all().map(item => ({\n  type: 'UNDERSTAFFING',\n  severity: item.json.employee_count === 0 ? 'CRITICAL' : 'ALERT',\n  date: item.json.date,\n  restaurant: item.json.restaurant,\n  details: `${item.json.employee_count}/${item.json.minimum_required} employees`,\n  message: item.json.status\n}));\n\nconst missingBreaks = $('Check Missing Breaks').all().map(item => ({\n  type: 'MISSING_BREAK',\n  severity: 'ALERT',\n  date: item.json.date,\n  restaurant: item.json.restaurant,\n  employee: `${item.json.employee_first_name || ''} ${item.json.employee_last_name}`.trim(),\n  details: `${item.json.duration_hours}h shift without break`,\n  message: item.json.status\n}));\n\nconst overtime = $('Check Weekly Overtime (40h)').all().map(item => ({\n  type: 'OVERTIME',\n  severity: 'ALERT',\n  restaurant: item.json.restaurant,\n  employee: `${item.json.first_name || ''} ${item.json.last_name}`.trim(),\n  details: `${item.json.weekly_hours}h this week (+${item.json.overtime}h)`,\n  message: item.json.status\n}));\n\nconst conflicts = $('Check Shift Conflicts').all().map(item => ({\n  type: 'SHIFT_CONFLICT',\n  severity: 'CRITICAL',\n  date: item.json.date,\n  employee: `${item.json.first_name || ''} ${item.json.last_name}`.trim(),\n  details: `${item.json.restaurant_1} (${item.json.start_1}-${item.json.end_1}) vs ${item.json.restaurant_2} (${item.json.start_2}-${item.json.end_2})`,\n  message: item.json.status\n}));\n\nconst allAlerts = [\n  ...conflicts,\n  ...understaffing.filter(a => a.severity === 'CRITICAL'),\n  ...understaffing.filter(a => a.severity === 'ALERT'),\n  ...missingBreaks,\n  ...overtime\n];\n\nconst summary = {\n  generated_at: new Date().toISOString(),\n  date_check: new Date().toISOString().split('T')[0],\n  total_alerts: allAlerts.length,\n  critical_count: allAlerts.filter(a => a.severity === 'CRITICAL').length,\n  warning_count: allAlerts.filter(a => a.severity === 'ALERT').length,\n  by_type: {\n    conflicts: conflicts.length,\n    understaffing: understaffing.length,\n    missing_breaks: missingBreaks.length,\n    overtime: overtime.length\n  },\n  alerts: allAlerts\n};\n\nreturn summary;"
+      },
+      "id": "aggregate-alerts",
+      "name": "Aggregate All Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-alerts",
+              "leftValue": "={{ $json.total_alerts }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-has-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format alerts for Telegram notification\nconst summary = $input.first().json;\n\nlet message = `📊 *ALERTES PLANNING - ${summary.date_check}*\\n\\n`;\n\nif (summary.critical_count > 0) {\n  message += `🔴 *${summary.critical_count} alerte(s) critique(s)*\\n`;\n}\nif (summary.warning_count > 0) {\n  message += `🟠 *${summary.warning_count} avertissement(s)*\\n`;\n}\n\nmessage += `\\n---\\n\\n`;\n\n// Group alerts by type\nconst conflicts = summary.alerts.filter(a => a.type === 'CONFLIT_SHIFT');\nconst understaffing = summary.alerts.filter(a => a.type === 'SOUS-EFFECTIF');\nconst missingBreaks = summary.alerts.filter(a => a.type === 'PAUSE_MANQUANTE');\nconst overtime = summary.alerts.filter(a => a.type === 'HEURES_SUPPLEMENTAIRES');\n\nif (conflicts.length > 0) {\n  message += `⚠️ *CONFLITS DE SHIFTS*\\n`;\n  for (const alert of conflicts) {\n    message += `  • ${alert.employee}: ${alert.details}\\n`;\n  }\n  message += `\\n`;\n}\n\nif (understaffing.length > 0) {\n  message += `👥 *SOUS-EFFECTIF*\\n`;\n  for (const alert of understaffing) {\n    const icon = alert.severity === 'CRITIQUE' ? '🔴' : '🟠';\n    message += `  ${icon} ${alert.date} - ${alert.restaurant}: ${alert.details}\\n`;\n  }\n  message += `\\n`;\n}\n\nif (missingBreaks.length > 0) {\n  message += `⏰ *PAUSES MANQUANTES*\\n`;\n  for (const alert of missingBreaks) {\n    message += `  • ${alert.date} - ${alert.employee} (${alert.restaurant}): ${alert.details}\\n`;\n  }\n  message += `\\n`;\n}\n\nif (overtime.length > 0) {\n  message += `⏱️ *DEPASSEMENT HEURES*\\n`;\n  for (const alert of overtime) {\n    message += `  • ${alert.employee} (${alert.restaurant}): ${alert.details}\\n`;\n  }\n  message += `\\n`;\n}\n\nmessage += `\\n_Genere le ${new Date().toLocaleString('fr-FR')}_`;\n\nreturn {\n  telegram_message: message,\n  summary: summary\n};"
+      },
+      "id": "format-telegram",
+      "name": "Format for Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No alerts - just log it\nreturn {\n  message: 'Aucune alerte detectee',\n  date_check: new Date().toISOString().split('T')[0],\n  generated_at: new Date().toISOString()\n};"
+      },
+      "id": "no-alerts",
+      "name": "No Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "output-alerts",
+      "name": "Output Alerts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1440, 200],
+      "notesInFlow": true,
+      "notes": "Ready for Telegram integration. Connect Telegram Send Message node here with:\n- Chat ID: your manager chat\n- Message: {{ $json.telegram_message }}\n- Parse Mode: Markdown"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "output-no-alerts",
+      "name": "Log No Alerts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1440, 400]
+    }
+  ],
+  "connections": {
+    "Daily 8AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Understaffing (3 days)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Missing Breaks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Weekly Overtime (40h)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Shift Conflicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Understaffing (3 days)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Missing Breaks": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Weekly Overtime (40h)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Shift Conflicts": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Alerts": {
+      "main": [
+        [
+          {
+            "node": "Has Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Format for Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Output Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Alerts": {
+      "main": [
+        [
+          {
+            "node": "Log No Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Alerts",
+      "id": "alerts-tag"
+    },
+    {
+      "name": "Scheduled",
+      "id": "scheduled-tag"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

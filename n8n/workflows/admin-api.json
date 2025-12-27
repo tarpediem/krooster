@@ -1,0 +1,828 @@
+{
+  "name": "Admin API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/backup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-backup",
+      "name": "Webhook Backup",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 100],
+      "webhookId": "admin-backup"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/clear-shifts",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-clear-shifts",
+      "name": "Webhook Clear Shifts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "admin-clear-shifts"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/clear-employees",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-clear-employees",
+      "name": "Webhook Clear Employees",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 500],
+      "webhookId": "admin-clear-employees"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/clear-leaves",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-clear-leaves",
+      "name": "Webhook Clear Leaves",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 700],
+      "webhookId": "admin-clear-leaves"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/reset-db",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-reset-db",
+      "name": "Webhook Reset DB",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 900],
+      "webhookId": "admin-reset-db"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/stats",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-stats",
+      "name": "Webhook Stats",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1100],
+      "webhookId": "admin-stats"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/llm-config",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-get-llm-config",
+      "name": "Webhook Get LLM Config",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1300],
+      "webhookId": "admin-get-llm-config"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/llm-config",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-save-llm-config",
+      "name": "Webhook Save LLM Config",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1500],
+      "webhookId": "admin-save-llm-config"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/test-llm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-test-llm",
+      "name": "Webhook Test LLM",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1700],
+      "webhookId": "admin-test-llm"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/export/employees",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-export-employees",
+      "name": "Webhook Export Employees",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1900],
+      "webhookId": "admin-export-employees"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/export/shifts",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-export-shifts",
+      "name": "Webhook Export Shifts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 2100],
+      "webhookId": "admin-export-shifts"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/export/leaves",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-export-leaves",
+      "name": "Webhook Export Leaves",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 2300],
+      "webhookId": "admin-export-leaves"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  'planning' as database_name,\n  current_timestamp as backup_timestamp,\n  (\n    SELECT string_agg(\n      'INSERT INTO ' || tablename || ' SELECT * FROM ' || tablename || ';',\n      E'\\n'\n    )\n    FROM pg_tables\n    WHERE schemaname = 'public'\n  ) as backup_note,\n  (\n    SELECT json_agg(row_to_json(r))\n    FROM restaurants r\n  ) as restaurants,\n  (\n    SELECT json_agg(row_to_json(e))\n    FROM employees e\n  ) as employees,\n  (\n    SELECT json_agg(row_to_json(s))\n    FROM shifts s\n  ) as shifts,\n  (\n    SELECT json_agg(row_to_json(a))\n    FROM absences a\n  ) as absences,\n  (\n    SELECT json_agg(row_to_json(m))\n    FROM missions m\n  ) as missions,\n  (\n    SELECT json_agg(row_to_json(av))\n    FROM availabilities av\n  ) as availabilities,\n  (\n    SELECT json_agg(row_to_json(lb))\n    FROM leave_balance lb\n  ) as leave_balance;",
+        "options": {}
+      },
+      "id": "postgres-backup",
+      "name": "Get Backup Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n\n// Generate SQL dump format\nlet sqlDump = `-- Database Backup: planning\\n-- Generated: ${data.backup_timestamp}\\n\\n`;\n\n// Restaurants\nif (data.restaurants && data.restaurants.length > 0) {\n  sqlDump += '-- RESTAURANTS\\n';\n  for (const r of data.restaurants) {\n    sqlDump += `INSERT INTO restaurants (id, name, location, address, opening_hours, closing_hours, created_at) VALUES (${r.id}, '${r.name}', '${r.location}', ${r.address ? \"'\" + r.address + \"'\" : 'NULL'}, '${r.opening_hours || '10:00'}', '${r.closing_hours || '23:00'}', '${r.created_at}');\\n`;\n  }\n  sqlDump += '\\n';\n}\n\n// Employees\nif (data.employees && data.employees.length > 0) {\n  sqlDump += '-- EMPLOYEES\\n';\n  for (const e of data.employees) {\n    const positions = e.positions ? `ARRAY[${e.positions.map(p => \"'\" + p + \"'\").join(',')}]::TEXT[]` : 'NULL';\n    sqlDump += `INSERT INTO employees (id, last_name, first_name, phone, email, restaurant_id, is_mobile, positions, active, hire_date, created_at) VALUES (${e.id}, '${e.last_name}', ${e.first_name ? \"'\" + e.first_name + \"'\" : 'NULL'}, ${e.phone ? \"'\" + e.phone + \"'\" : 'NULL'}, ${e.email ? \"'\" + e.email + \"'\" : 'NULL'}, ${e.restaurant_id || 'NULL'}, ${e.is_mobile}, ${positions}, ${e.active}, ${e.hire_date ? \"'\" + e.hire_date + \"'\" : 'NULL'}, '${e.created_at}');\\n`;\n  }\n  sqlDump += '\\n';\n}\n\n// Shifts\nif (data.shifts && data.shifts.length > 0) {\n  sqlDump += '-- SHIFTS\\n';\n  for (const s of data.shifts) {\n    sqlDump += `INSERT INTO shifts (id, employee_id, restaurant_id, date, start_time, end_time, break_start, break_duration, position, is_mission, status, notes, created_at) VALUES (${s.id}, ${s.employee_id}, ${s.restaurant_id}, '${s.date}', '${s.start_time}', '${s.end_time}', ${s.break_start ? \"'\" + s.break_start + \"'\" : 'NULL'}, ${s.break_duration || 30}, ${s.position ? \"'\" + s.position + \"'\" : 'NULL'}, ${s.is_mission}, '${s.status}', ${s.notes ? \"'\" + s.notes.replace(/'/g, \"''\") + \"'\" : 'NULL'}, '${s.created_at}');\\n`;\n  }\n  sqlDump += '\\n';\n}\n\n// Absences\nif (data.absences && data.absences.length > 0) {\n  sqlDump += '-- ABSENCES\\n';\n  for (const a of data.absences) {\n    sqlDump += `INSERT INTO absences (id, employee_id, type, start_date, end_date, status, comment, approved_by, approval_date, created_at) VALUES (${a.id}, ${a.employee_id}, '${a.type}', '${a.start_date}', '${a.end_date}', '${a.status}', ${a.comment ? \"'\" + a.comment.replace(/'/g, \"''\") + \"'\" : 'NULL'}, ${a.approved_by ? \"'\" + a.approved_by + \"'\" : 'NULL'}, ${a.approval_date ? \"'\" + a.approval_date + \"'\" : 'NULL'}, '${a.created_at}');\\n`;\n  }\n  sqlDump += '\\n';\n}\n\nreturn {\n  success: true,\n  filename: `planning_backup_${timestamp}.sql`,\n  content: sqlDump,\n  timestamp: data.backup_timestamp,\n  tables: {\n    restaurants: data.restaurants?.length || 0,\n    employees: data.employees?.length || 0,\n    shifts: data.shifts?.length || 0,\n    absences: data.absences?.length || 0,\n    missions: data.missions?.length || 0\n  }\n};"
+      },
+      "id": "format-backup",
+      "name": "Format Backup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-backup",
+      "name": "Respond Backup",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM shifts RETURNING id;",
+        "options": {}
+      },
+      "id": "postgres-clear-shifts",
+      "name": "Clear Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst count = results.length;\nreturn {\n  success: true,\n  message: `Successfully deleted ${count} shift(s)`,\n  deleted_count: count\n};"
+      },
+      "id": "format-clear-shifts",
+      "name": "Format Clear Shifts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-clear-shifts",
+      "name": "Respond Clear Shifts",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM employees RETURNING id;",
+        "options": {}
+      },
+      "id": "postgres-clear-employees",
+      "name": "Clear Employees",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst count = results.length;\nreturn {\n  success: true,\n  message: `Successfully deleted ${count} employee(s) and all related data (shifts, absences, etc.)`,\n  deleted_count: count\n};"
+      },
+      "id": "format-clear-employees",
+      "name": "Format Clear Employees",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-clear-employees",
+      "name": "Respond Clear Employees",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM absences RETURNING id;",
+        "options": {}
+      },
+      "id": "postgres-clear-leaves",
+      "name": "Clear Leaves",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 700],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst count = results.length;\nreturn {\n  success: true,\n  message: `Successfully deleted ${count} leave request(s)`,\n  deleted_count: count\n};"
+      },
+      "id": "format-clear-leaves",
+      "name": "Format Clear Leaves",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-clear-leaves",
+      "name": "Respond Clear Leaves",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 700]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "TRUNCATE TABLE shifts, absences, missions, availabilities, leave_balance, employees RESTART IDENTITY CASCADE;\n\n-- Re-insert default restaurants if they were truncated\nINSERT INTO restaurants (name, location) \nSELECT 'Hua Hin', 'Beachfront - Hua Hin'\nWHERE NOT EXISTS (SELECT 1 FROM restaurants WHERE name = 'Hua Hin');\n\nINSERT INTO restaurants (name, location)\nSELECT 'Sathorn', 'Bangkok - Sathorn'\nWHERE NOT EXISTS (SELECT 1 FROM restaurants WHERE name = 'Sathorn');\n\nSELECT 'Database reset complete' as message, (SELECT COUNT(*) FROM restaurants) as restaurants_count;",
+        "options": {}
+      },
+      "id": "postgres-reset-db",
+      "name": "Reset Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 900],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nreturn {\n  success: true,\n  message: 'Database has been reset. All data cleared except restaurants.',\n  restaurants_count: result.restaurants_count,\n  tables_truncated: ['shifts', 'absences', 'missions', 'availabilities', 'leave_balance', 'employees']\n};"
+      },
+      "id": "format-reset-db",
+      "name": "Format Reset DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-reset-db",
+      "name": "Respond Reset DB",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 900]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM restaurants) as restaurants,\n  (SELECT COUNT(*) FROM employees) as employees,\n  (SELECT COUNT(*) FROM employees WHERE active = TRUE) as active_employees,\n  (SELECT COUNT(*) FROM employees WHERE is_mobile = TRUE) as mobile_employees,\n  (SELECT COUNT(*) FROM shifts) as shifts,\n  (SELECT COUNT(*) FROM shifts WHERE date >= CURRENT_DATE) as upcoming_shifts,\n  (SELECT COUNT(*) FROM absences) as absences,\n  (SELECT COUNT(*) FROM absences WHERE status = 'approved') as approved_absences,\n  (SELECT COUNT(*) FROM absences WHERE status = 'requested') as pending_absences,\n  (SELECT COUNT(*) FROM missions) as missions,\n  (SELECT COUNT(*) FROM availabilities) as availabilities,\n  (SELECT COUNT(*) FROM leave_balance) as leave_balances;",
+        "options": {}
+      },
+      "id": "postgres-stats",
+      "name": "Get Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 1100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $input.first().json;\nreturn {\n  success: true,\n  stats: {\n    restaurants: parseInt(stats.restaurants) || 0,\n    employees: {\n      total: parseInt(stats.employees) || 0,\n      active: parseInt(stats.active_employees) || 0,\n      mobile: parseInt(stats.mobile_employees) || 0\n    },\n    shifts: {\n      total: parseInt(stats.shifts) || 0,\n      upcoming: parseInt(stats.upcoming_shifts) || 0\n    },\n    absences: {\n      total: parseInt(stats.absences) || 0,\n      approved: parseInt(stats.approved_absences) || 0,\n      pending: parseInt(stats.pending_absences) || 0\n    },\n    missions: parseInt(stats.missions) || 0,\n    availabilities: parseInt(stats.availabilities) || 0,\n    leave_balances: parseInt(stats.leave_balances) || 0\n  },\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-stats",
+      "name": "Format Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 1100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-stats",
+      "name": "Respond Stats",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 1100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS app_config (\n    key VARCHAR(100) PRIMARY KEY,\n    value JSONB NOT NULL,\n    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nSELECT COALESCE(\n  (SELECT value FROM app_config WHERE key = 'llm_config'),\n  '{\"provider\": \"cerebras\", \"model\": \"llama-3.3-70b\", \"api_url\": \"https://api.cerebras.ai/v1\"}'::jsonb\n) as config;",
+        "options": {}
+      },
+      "id": "postgres-get-llm-config",
+      "name": "Get LLM Config",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 1300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst config = typeof result.config === 'string' ? JSON.parse(result.config) : result.config;\nreturn {\n  success: true,\n  config: {\n    provider: config.provider || 'cerebras',\n    model: config.model || 'llama-3.3-70b',\n    api_url: config.api_url || 'https://api.cerebras.ai/v1'\n  }\n};"
+      },
+      "id": "format-get-llm-config",
+      "name": "Format Get LLM Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 1300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-get-llm-config",
+      "name": "Respond Get LLM Config",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 1300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst config = {\n  provider: body.provider || 'cerebras',\n  model: body.model || 'llama-3.3-70b',\n  api_url: body.api_url || 'https://api.cerebras.ai/v1'\n};\nreturn { config: JSON.stringify(config) };"
+      },
+      "id": "prepare-save-llm-config",
+      "name": "Prepare Save LLM Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 1500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS app_config (\n    key VARCHAR(100) PRIMARY KEY,\n    value JSONB NOT NULL,\n    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nINSERT INTO app_config (key, value, updated_at)\nVALUES ('llm_config', '{{ $json.config }}'::jsonb, CURRENT_TIMESTAMP)\nON CONFLICT (key) DO UPDATE SET\n  value = EXCLUDED.value,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-save-llm-config",
+      "name": "Save LLM Config",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [720, 1500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst config = typeof result.value === 'string' ? JSON.parse(result.value) : result.value;\nreturn {\n  success: true,\n  message: 'LLM configuration saved successfully',\n  config: config,\n  updated_at: result.updated_at\n};"
+      },
+      "id": "format-save-llm-config",
+      "name": "Format Save LLM Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 1500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-save-llm-config",
+      "name": "Respond Save LLM Config",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 1500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(\n  (SELECT value FROM app_config WHERE key = 'llm_config'),\n  '{\"provider\": \"cerebras\", \"model\": \"llama-3.3-70b\", \"api_url\": \"https://api.cerebras.ai/v1\"}'::jsonb\n) as config;",
+        "options": {}
+      },
+      "id": "postgres-get-config-for-test",
+      "name": "Get Config For Test",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 1700],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst config = typeof result.config === 'string' ? JSON.parse(result.config) : result.config;\nconst startTime = Date.now();\nreturn {\n  config: config,\n  startTime: startTime,\n  testPrompt: 'Hello! Please respond with a simple acknowledgment that you are working correctly.'\n};"
+      },
+      "id": "prepare-test-llm",
+      "name": "Prepare Test LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 1700]
+    },
+    {
+      "parameters": {
+        "modelId": {"__rl": true, "mode": "list", "value": "llama-3.3-70b"},
+        "messages": {
+          "values": [
+            {"role": "system", "content": "You are a helpful assistant. Respond briefly."},
+            {"role": "user", "content": "={{ $json.testPrompt }}"}
+          ]
+        },
+        "options": {"maxTokens": 100, "temperature": 0.1}
+      },
+      "id": "call-llm-test",
+      "name": "Call LLM Test",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [960, 1700],
+      "credentials": {
+        "openAiApi": {"id": "KmYMJqpoHOBmdlVC", "name": "Cerebras"}
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prepareData = $('Prepare Test LLM').first().json;\nconst endTime = Date.now();\nconst responseTime = endTime - prepareData.startTime;\n\nlet aiContent = response?.message?.content || response?.choices?.[0]?.message?.content || response?.content || null;\n\nreturn {\n  success: true,\n  message: 'LLM connection test successful',\n  config: prepareData.config,\n  response: aiContent,\n  response_time_ms: responseTime,\n  model_used: response?.model || prepareData.config.model\n};"
+      },
+      "id": "format-test-llm-success",
+      "name": "Format Test LLM Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 1700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-test-llm",
+      "name": "Respond Test LLM",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 1700]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  e.id,\n  e.last_name,\n  e.first_name,\n  e.phone,\n  e.email,\n  r.name as restaurant,\n  e.is_mobile,\n  array_to_string(e.positions, ',') as positions,\n  e.active,\n  e.hire_date,\n  e.created_at\nFROM employees e\nLEFT JOIN restaurants r ON e.restaurant_id = r.id\nORDER BY e.id;",
+        "options": {}
+      },
+      "id": "postgres-export-employees",
+      "name": "Export Employees Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 1900],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n\nif (rows.length === 0) {\n  return {\n    success: true,\n    message: 'No employees to export',\n    csv: 'id,last_name,first_name,phone,email,restaurant,is_mobile,positions,active,hire_date,created_at',\n    count: 0\n  };\n}\n\nconst headers = ['id', 'last_name', 'first_name', 'phone', 'email', 'restaurant', 'is_mobile', 'positions', 'active', 'hire_date', 'created_at'];\n\nconst escapeCSV = (value) => {\n  if (value === null || value === undefined) return '';\n  const str = String(value);\n  if (str.includes(',') || str.includes('\"') || str.includes('\\n')) {\n    return '\"' + str.replace(/\"/g, '\"\"') + '\"';\n  }\n  return str;\n};\n\nlet csv = headers.join(',') + '\\n';\nfor (const row of rows) {\n  const values = headers.map(h => escapeCSV(row[h]));\n  csv += values.join(',') + '\\n';\n}\n\nreturn {\n  success: true,\n  csv: csv,\n  count: rows.length,\n  filename: `employees_export_${new Date().toISOString().split('T')[0]}.csv`\n};"
+      },
+      "id": "format-export-employees",
+      "name": "Format Export Employees",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 1900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-export-employees",
+      "name": "Respond Export Employees",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 1900]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  s.id,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  r.name as restaurant,\n  s.date,\n  s.start_time,\n  s.end_time,\n  s.break_start,\n  s.break_duration,\n  s.position,\n  s.is_mission,\n  s.status,\n  s.notes,\n  s.created_at\nFROM shifts s\nLEFT JOIN employees e ON s.employee_id = e.id\nLEFT JOIN restaurants r ON s.restaurant_id = r.id\nORDER BY s.date, s.start_time;",
+        "options": {}
+      },
+      "id": "postgres-export-shifts",
+      "name": "Export Shifts Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 2100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n\nif (rows.length === 0) {\n  return {\n    success: true,\n    message: 'No shifts to export',\n    csv: 'id,employee_last_name,employee_first_name,restaurant,date,start_time,end_time,break_start,break_duration,position,is_mission,status,notes,created_at',\n    count: 0\n  };\n}\n\nconst headers = ['id', 'employee_last_name', 'employee_first_name', 'restaurant', 'date', 'start_time', 'end_time', 'break_start', 'break_duration', 'position', 'is_mission', 'status', 'notes', 'created_at'];\n\nconst escapeCSV = (value) => {\n  if (value === null || value === undefined) return '';\n  const str = String(value);\n  if (str.includes(',') || str.includes('\"') || str.includes('\\n')) {\n    return '\"' + str.replace(/\"/g, '\"\"') + '\"';\n  }\n  return str;\n};\n\nlet csv = headers.join(',') + '\\n';\nfor (const row of rows) {\n  const values = headers.map(h => escapeCSV(row[h]));\n  csv += values.join(',') + '\\n';\n}\n\nreturn {\n  success: true,\n  csv: csv,\n  count: rows.length,\n  filename: `shifts_export_${new Date().toISOString().split('T')[0]}.csv`\n};"
+      },
+      "id": "format-export-shifts",
+      "name": "Format Export Shifts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 2100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-export-shifts",
+      "name": "Respond Export Shifts",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 2100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  a.id,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  a.type,\n  a.start_date,\n  a.end_date,\n  a.status,\n  a.comment,\n  a.approved_by,\n  a.approval_date,\n  a.created_at\nFROM absences a\nLEFT JOIN employees e ON a.employee_id = e.id\nORDER BY a.start_date;",
+        "options": {}
+      },
+      "id": "postgres-export-leaves",
+      "name": "Export Leaves Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 2300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n\nif (rows.length === 0) {\n  return {\n    success: true,\n    message: 'No leave requests to export',\n    csv: 'id,employee_last_name,employee_first_name,type,start_date,end_date,status,comment,approved_by,approval_date,created_at',\n    count: 0\n  };\n}\n\nconst headers = ['id', 'employee_last_name', 'employee_first_name', 'type', 'start_date', 'end_date', 'status', 'comment', 'approved_by', 'approval_date', 'created_at'];\n\nconst escapeCSV = (value) => {\n  if (value === null || value === undefined) return '';\n  const str = String(value);\n  if (str.includes(',') || str.includes('\"') || str.includes('\\n')) {\n    return '\"' + str.replace(/\"/g, '\"\"') + '\"';\n  }\n  return str;\n};\n\nlet csv = headers.join(',') + '\\n';\nfor (const row of rows) {\n  const values = headers.map(h => escapeCSV(row[h]));\n  csv += values.join(',') + '\\n';\n}\n\nreturn {\n  success: true,\n  csv: csv,\n  count: rows.length,\n  filename: `leaves_export_${new Date().toISOString().split('T')[0]}.csv`\n};"
+      },
+      "id": "format-export-leaves",
+      "name": "Format Export Leaves",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 2300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-export-leaves",
+      "name": "Respond Export Leaves",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 2300]
+    }
+  ],
+  "connections": {
+    "Webhook Backup": {
+      "main": [[{"node": "Get Backup Data", "type": "main", "index": 0}]]
+    },
+    "Get Backup Data": {
+      "main": [[{"node": "Format Backup", "type": "main", "index": 0}]]
+    },
+    "Format Backup": {
+      "main": [[{"node": "Respond Backup", "type": "main", "index": 0}]]
+    },
+    "Webhook Clear Shifts": {
+      "main": [[{"node": "Clear Shifts", "type": "main", "index": 0}]]
+    },
+    "Clear Shifts": {
+      "main": [[{"node": "Format Clear Shifts", "type": "main", "index": 0}]]
+    },
+    "Format Clear Shifts": {
+      "main": [[{"node": "Respond Clear Shifts", "type": "main", "index": 0}]]
+    },
+    "Webhook Clear Employees": {
+      "main": [[{"node": "Clear Employees", "type": "main", "index": 0}]]
+    },
+    "Clear Employees": {
+      "main": [[{"node": "Format Clear Employees", "type": "main", "index": 0}]]
+    },
+    "Format Clear Employees": {
+      "main": [[{"node": "Respond Clear Employees", "type": "main", "index": 0}]]
+    },
+    "Webhook Clear Leaves": {
+      "main": [[{"node": "Clear Leaves", "type": "main", "index": 0}]]
+    },
+    "Clear Leaves": {
+      "main": [[{"node": "Format Clear Leaves", "type": "main", "index": 0}]]
+    },
+    "Format Clear Leaves": {
+      "main": [[{"node": "Respond Clear Leaves", "type": "main", "index": 0}]]
+    },
+    "Webhook Reset DB": {
+      "main": [[{"node": "Reset Database", "type": "main", "index": 0}]]
+    },
+    "Reset Database": {
+      "main": [[{"node": "Format Reset DB", "type": "main", "index": 0}]]
+    },
+    "Format Reset DB": {
+      "main": [[{"node": "Respond Reset DB", "type": "main", "index": 0}]]
+    },
+    "Webhook Stats": {
+      "main": [[{"node": "Get Stats", "type": "main", "index": 0}]]
+    },
+    "Get Stats": {
+      "main": [[{"node": "Format Stats", "type": "main", "index": 0}]]
+    },
+    "Format Stats": {
+      "main": [[{"node": "Respond Stats", "type": "main", "index": 0}]]
+    },
+    "Webhook Get LLM Config": {
+      "main": [[{"node": "Get LLM Config", "type": "main", "index": 0}]]
+    },
+    "Get LLM Config": {
+      "main": [[{"node": "Format Get LLM Config", "type": "main", "index": 0}]]
+    },
+    "Format Get LLM Config": {
+      "main": [[{"node": "Respond Get LLM Config", "type": "main", "index": 0}]]
+    },
+    "Webhook Save LLM Config": {
+      "main": [[{"node": "Prepare Save LLM Config", "type": "main", "index": 0}]]
+    },
+    "Prepare Save LLM Config": {
+      "main": [[{"node": "Save LLM Config", "type": "main", "index": 0}]]
+    },
+    "Save LLM Config": {
+      "main": [[{"node": "Format Save LLM Config", "type": "main", "index": 0}]]
+    },
+    "Format Save LLM Config": {
+      "main": [[{"node": "Respond Save LLM Config", "type": "main", "index": 0}]]
+    },
+    "Webhook Test LLM": {
+      "main": [[{"node": "Get Config For Test", "type": "main", "index": 0}]]
+    },
+    "Get Config For Test": {
+      "main": [[{"node": "Prepare Test LLM", "type": "main", "index": 0}]]
+    },
+    "Prepare Test LLM": {
+      "main": [[{"node": "Call LLM Test", "type": "main", "index": 0}]]
+    },
+    "Call LLM Test": {
+      "main": [[{"node": "Format Test LLM Success", "type": "main", "index": 0}]]
+    },
+    "Format Test LLM Success": {
+      "main": [[{"node": "Respond Test LLM", "type": "main", "index": 0}]]
+    },
+    "Webhook Export Employees": {
+      "main": [[{"node": "Export Employees Query", "type": "main", "index": 0}]]
+    },
+    "Export Employees Query": {
+      "main": [[{"node": "Format Export Employees", "type": "main", "index": 0}]]
+    },
+    "Format Export Employees": {
+      "main": [[{"node": "Respond Export Employees", "type": "main", "index": 0}]]
+    },
+    "Webhook Export Shifts": {
+      "main": [[{"node": "Export Shifts Query", "type": "main", "index": 0}]]
+    },
+    "Export Shifts Query": {
+      "main": [[{"node": "Format Export Shifts", "type": "main", "index": 0}]]
+    },
+    "Format Export Shifts": {
+      "main": [[{"node": "Respond Export Shifts", "type": "main", "index": 0}]]
+    },
+    "Webhook Export Leaves": {
+      "main": [[{"node": "Export Leaves Query", "type": "main", "index": 0}]]
+    },
+    "Export Leaves Query": {
+      "main": [[{"node": "Format Export Leaves", "type": "main", "index": 0}]]
+    },
+    "Format Export Leaves": {
+      "main": [[{"node": "Respond Export Leaves", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "admin",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "api",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 12,
+  "active": true
+}

@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Home,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Employees', href: '/employees', icon: Users },
   { name: 'Leave', href: '/leave', icon: CalendarOff },
   { name: 'AI Assistant', href: '/assistant', icon: MessageSquare },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 function NavLinks({ onClick }: { onClick?: () => void }) {

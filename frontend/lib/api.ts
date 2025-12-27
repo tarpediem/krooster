@@ -190,3 +190,97 @@ export async function generateSchedule(
   });
   return result;
 }
+
+// ============ ADMIN ============
+
+export interface AdminStats {
+  employee_count: number;
+  shift_count: number;
+  leave_count: number;
+  last_backup?: string;
+}
+
+export interface LLMConfig {
+  provider: 'cerebras' | 'ollama';
+  model: string;
+  api_url: string;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const result = await fetchAPI<APIResponse<AdminStats>>('/api/admin/stats');
+  return result.data || { employee_count: 0, shift_count: 0, leave_count: 0 };
+}
+
+export async function getLLMConfig(): Promise<LLMConfig> {
+  const result = await fetchAPI<APIResponse<LLMConfig>>('/api/admin/llm-config');
+  return result.data || { provider: 'ollama', model: 'mistral', api_url: 'http://host.docker.internal:11434' };
+}
+
+export async function saveLLMConfig(config: LLMConfig): Promise<void> {
+  await fetchAPI('/api/admin/llm-config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function testLLMConnection(): Promise<{ success: boolean; message: string }> {
+  const result = await fetchAPI<{ success: boolean; message: string }>('/api/admin/test-llm', {
+    method: 'POST',
+  });
+  return result;
+}
+
+export async function backupDatabase(): Promise<Blob> {
+  const url = `${API_BASE}/api/admin/backup`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to create backup');
+  }
+  return response.blob();
+}
+
+export async function clearShifts(): Promise<void> {
+  await fetchAPI('/api/admin/clear-shifts', { method: 'POST' });
+}
+
+export async function clearEmployees(): Promise<void> {
+  await fetchAPI('/api/admin/clear-employees', { method: 'POST' });
+}
+
+export async function clearLeaves(): Promise<void> {
+  await fetchAPI('/api/admin/clear-leaves', { method: 'POST' });
+}
+
+export async function resetDatabase(): Promise<void> {
+  await fetchAPI('/api/admin/reset-db', { method: 'POST' });
+}
+
+export async function exportEmployeesCSV(): Promise<Blob> {
+  const url = `${API_BASE}/api/admin/export/employees`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to export employees');
+  }
+  return response.blob();
+}
+
+export async function exportShiftsCSV(): Promise<Blob> {
+  const url = `${API_BASE}/api/admin/export/shifts`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to export shifts');
+  }
+  return response.blob();
+}
+
+export async function exportLeavesCSV(): Promise<Blob> {
+  const url = `${API_BASE}/api/admin/export/leaves`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to export leave requests');
+  }
+  return response.blob();
+}

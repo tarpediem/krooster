@@ -11,12 +11,14 @@ import {
   Menu,
   X,
   ChefHat,
+  Home,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState } from 'react';
 
 const navigation = [
+  { name: 'Home', href: '/', icon: Home },
   { name: 'Schedule', href: '/calendar', icon: Calendar },
   { name: 'Employees', href: '/employees', icon: Users },
   { name: 'Leave', href: '/leave', icon: CalendarOff },

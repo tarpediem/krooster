@@ -21,10 +21,8 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT e.id, e.last_name, e.first_name, e.positions, e.is_mobile, r.name AS restaurant_name, r.id AS restaurant_id\nFROM employees e\nJOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = TRUE\nAND e.id NOT IN (\n    SELECT employee_id FROM absences \n    WHERE status = 'approved' \n    AND $1::date BETWEEN start_date AND end_date\n)\nORDER BY r.name, e.last_name;",
-        "options": {
-          "queryParams": "={{ $json.body.start_date || new Date().toISOString().split('T')[0] }}"
-        }
+        "query": "=SELECT e.id, e.last_name, e.first_name, e.positions, e.is_mobile, r.name AS restaurant_name, r.id AS restaurant_id\nFROM employees e\nJOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = TRUE\nAND e.id NOT IN (\n    SELECT employee_id FROM absences \n    WHERE status = 'approved' \n    AND '{{ $json.body.start_date || new Date().toISOString().split('T')[0] }}'::date BETWEEN start_date AND end_date\n)\nORDER BY r.name, e.last_name;",
+        "options": {}
       },
       "id": "fetch-employees",
       "name": "Fetch Available Employees",
@@ -65,7 +63,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, name, location, opening_time, closing_time FROM restaurants ORDER BY id;",
+        "query": "SELECT id, name, location, opening_hours, closing_hours FROM restaurants ORDER BY id;",
         "options": {}
       },
       "id": "fetch-restaurants",
@@ -85,12 +83,7 @@
     },
     {
       "parameters": {
-        "mode": "combine",
-        "mergeByFields": {
-          "values": []
-        },
-        "combinationMode": "multiplex",
-        "options": {}
+        "mode": "append"
       },
       "id": "merge-data",
       "name": "Merge All Data",
@@ -116,27 +109,27 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://planning-ollama:11434/api/chat",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"mistral\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.userMessage) }}\n    }\n  ],\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.3,\n    \"num_predict\": 4096\n  }\n}",
-        "options": {
-          "timeout": 120000
-        }
+        "modelId": {"__rl": true, "mode": "list", "value": "llama-3.3-70b"},
+        "messages": {
+          "values": [
+            {"role": "system", "content": "={{ $json.systemPrompt }}"},
+            {"role": "user", "content": "={{ $json.userMessage }}"}
+          ]
+        },
+        "options": {"maxTokens": 8192, "temperature": 0.3}
       },
-      "id": "call-ollama",
-      "name": "Call Ollama AI",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1200,
-        300
-      ]
+      "id": "call-cerebras",
+      "name": "Call Cerebras AI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [1200, 300],
+      "credentials": {
+        "openAiApi": {"id": "KmYMJqpoHOBmdlVC", "name": "Cerebras"}
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Parse Ollama response and extract planning\nconst ollamaResponse = $input.first().json;\nconst context = $('Prepare AI Prompt').first().json.context;\n\nlet aiContent = '';\nif (ollamaResponse.message && ollamaResponse.message.content) {\n  aiContent = ollamaResponse.message.content;\n} else if (ollamaResponse.response) {\n  aiContent = ollamaResponse.response;\n}\n\n// Try to extract JSON from response\nlet planning = null;\nlet alerts = [];\nlet suggestions = [];\n\ntry {\n  // Look for JSON block in response\n  const jsonMatch = aiContent.match(/\\{[\\s\\S]*\\}/g);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[jsonMatch.length - 1]);\n    planning = parsed.planning || null;\n    alerts = parsed.alerts || [];\n    suggestions = parsed.suggestions || [];\n  }\n} catch (e) {\n  alerts.push('Error parsing AI response: ' + e.message);\n}\n\nreturn {\n  success: planning !== null,\n  period: context.period,\n  planning: planning,\n  alerts: alerts,\n  suggestions: suggestions,\n  raw_response: aiContent,\n  generated_at: new Date().toISOString()\n};"
+        "jsCode": "// Parse Cerebras/OpenAI response and extract planning\nconst response = $input.first().json;\nconst context = $('Prepare AI Prompt').first().json.context;\n\nlet aiContent = '';\nif (response.message?.content) {\n  aiContent = response.message.content;\n} else if (response.choices?.[0]?.message?.content) {\n  aiContent = response.choices[0].message.content;\n} else if (response.content) {\n  aiContent = response.content;\n}\n\n// Try to extract JSON from response\nlet planning = null;\nlet alerts = [];\nlet suggestions = [];\n\ntry {\n  // Look for JSON block in response\n  const jsonMatch = aiContent.match(/\\{[\\s\\S]*\\}/g);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[jsonMatch.length - 1]);\n    planning = parsed.planning || null;\n    alerts = parsed.alerts || [];\n    suggestions = parsed.suggestions || [];\n  }\n} catch (e) {\n  alerts.push('Error parsing AI response: ' + e.message);\n}\n\nreturn {\n  success: planning !== null,\n  period: context.period,\n  planning: planning,\n  alerts: alerts,\n  suggestions: suggestions,\n  raw_response: aiContent,\n  generated_at: new Date().toISOString()\n};"
       },
       "id": "parse-response",
       "name": "Parse AI Response",
@@ -153,7 +146,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -167,11 +160,11 @@
             },
             {
               "id": "check-planning-exists",
-              "leftValue": "={{ $json.planning }}",
-              "rightValue": "",
+              "leftValue": "={{ Array.isArray($json.planning) && $json.planning.length > 0 }}",
+              "rightValue": true,
               "operator": {
-                "type": "array",
-                "operation": "notEmpty"
+                "type": "boolean",
+                "operation": "true"
               }
             }
           ],
@@ -203,9 +196,8 @@
     },
     {
       "parameters": {
-        "operation": "insert",
-        "table": "shifts",
-        "columns": "employee_id, restaurant_id, date, start_time, end_time, break_start, break_duration, position, is_mission, status, notes",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO shifts (employee_id, restaurant_id, date, start_time, end_time, break_start, break_duration, position, is_mission, status, notes) VALUES ({{ $json.employee_id }}, {{ $json.restaurant_id }}, '{{ $json.date }}', '{{ $json.start_time }}', '{{ $json.end_time }}', {{ $json.break_start ? \"'\" + $json.break_start + \"'\" : 'NULL' }}, {{ $json.break_duration || 'NULL' }}, '{{ $json.position }}', {{ $json.is_mission }}, '{{ $json.status }}', '{{ $json.notes }}') RETURNING *;",
         "options": {}
       },
       "id": "insert-shifts",
@@ -357,14 +349,14 @@
       "main": [
         [
           {
-            "node": "Call Ollama AI",
+            "node": "Call Cerebras AI",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Call Ollama AI": {
+    "Call Cerebras AI": {
       "main": [
         [
           {

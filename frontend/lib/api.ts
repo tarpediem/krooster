@@ -142,10 +142,10 @@ export async function createLeaveRequest(data: CreateLeaveData): Promise<LeaveRe
   return result.data!;
 }
 
-export async function approveLeave(id: number, validatedBy?: string): Promise<LeaveRequest> {
+export async function approveLeave(id: number, approvedBy?: string): Promise<LeaveRequest> {
   const result = await fetchAPI<APIResponse<LeaveRequest>>(`/api/leave/approve?id=${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ validated_by: validatedBy || 'Manager' }),
+    body: JSON.stringify({ approved_by: approvedBy || 'Manager' }),
   });
   return result.data!;
 }

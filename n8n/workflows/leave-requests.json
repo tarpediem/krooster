@@ -133,7 +133,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH update_absence AS (\n  UPDATE absences \n  SET \n    status = 'approved',\n    validated_by = '{{ $json.body.validated_by || 'Manager' }}',\n    validation_date = CURRENT_TIMESTAMP\n  WHERE id = {{ $json.query.id }}\n  RETURNING *\n),\nupdate_balance AS (\n  UPDATE leave_balance \n  SET days_taken = days_taken + (\n    SELECT (end_date - start_date + 1) FROM update_absence\n  )\n  WHERE employee_id = (SELECT employee_id FROM update_absence)\n  AND year = EXTRACT(YEAR FROM CURRENT_DATE)\n)\nSELECT * FROM update_absence;",
+        "query": "WITH update_absence AS (\n  UPDATE absences \n  SET \n    status = 'approved',\n    approved_by = '{{ $json.body.approved_by || 'Manager' }}',\n    approval_date = CURRENT_TIMESTAMP\n  WHERE id = {{ $json.query.id }}\n  RETURNING *\n),\nupdate_balance AS (\n  UPDATE leave_balance \n  SET days_taken = days_taken + (\n    SELECT (end_date - start_date + 1) FROM update_absence\n  )\n  WHERE employee_id = (SELECT employee_id FROM update_absence)\n  AND year = EXTRACT(YEAR FROM CURRENT_DATE)\n)\nSELECT * FROM update_absence;",
         "options": {}
       },
       "id": "postgres-approve-leave",
@@ -186,7 +186,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE absences \nSET \n  status = 'rejected',\n  validated_by = '{{ $json.body.validated_by || 'Manager' }}',\n  validation_date = CURRENT_TIMESTAMP,\n  comment = COALESCE(comment, '') || ' | Rejection: {{ $json.body.reason || 'Not specified' }}'\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
+        "query": "UPDATE absences \nSET \n  status = 'rejected',\n  approved_by = '{{ $json.body.approved_by || 'Manager' }}',\n  approval_date = CURRENT_TIMESTAMP,\n  comment = COALESCE(comment, '') || ' | Rejection: {{ $json.body.reason || 'Not specified' }}'\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
         "options": {}
       },
       "id": "postgres-reject-leave",
@@ -275,7 +275,7 @@
     {
       "parameters": {
         "httpMethod": "GET",
-        "path": "api/leave/balance/:employee_id",
+        "path": "api/leave/balance",
         "options": {},
         "responseMode": "responseNode"
       },

@@ -32,21 +32,10 @@ services:
       postgres:
         condition: service_healthy
 
-  ollama:
-    image: docker.io/ollama/ollama:rocm
-    container_name: planning-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
-    environment:
-      - HSA_OVERRIDE_GFX_VERSION=11.0.0
-    group_add:
-      - "985"
-      - "989"
+  # OLLAMA: Using host installation with Vulkan GPU support
+  # Run: systemctl start ollama (uses AMD RX 7600 via Vulkan)
+  # Model: mistral-krooster (16K context, GPU optimized)
+  # Host service configured at: /etc/systemd/system/ollama.service.d/override.conf
 
   n8n:
     image: docker.io/n8nio/n8n:latest
@@ -63,6 +52,8 @@ services:
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - N8N_HOST=localhost
       - WEBHOOK_URL=http://localhost:5678/
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     ports:
       - "5678:5678"
     volumes:
@@ -86,5 +77,4 @@ services:
 volumes:
   postgres_data:
   nocodb_data:
-  ollama_data:
   n8n_data:

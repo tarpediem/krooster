@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAIChat, useGenerateSchedule } from '@/hooks/useAI';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
@@ -26,9 +27,12 @@ import {
   AlertTriangle,
   Users,
   Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, addWeeks } from 'date-fns';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AIMessage } from '@/lib/types';
 
 const SUGGESTED_QUESTIONS = [
@@ -71,7 +75,15 @@ function MessageBubble({ message }: { message: AIMessage }) {
             : 'bg-muted'
         }`}
       >
-        <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+        ) : (
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-table:my-2 prose-hr:my-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
         {message.timestamp && (
           <p className={`text-xs mt-1 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
             {format(new Date(message.timestamp), 'h:mm a')}
@@ -87,11 +99,19 @@ function MessageBubble({ message }: { message: AIMessage }) {
   );
 }
 
+const GENERATION_STEPS = [
+  { label: 'Fetching employees...', duration: 2 },
+  { label: 'Checking leave requests...', duration: 3 },
+  { label: 'Analyzing availability...', duration: 5 },
+  { label: 'AI generating schedule...', duration: 180 },
+  { label: 'Parsing results...', duration: 5 },
+];
+
 function GenerateScheduleDialog({
   onGenerate,
   isLoading,
 }: {
-  onGenerate: (startDate: string, endDate: string, requirements?: string, createShifts?: boolean) => void;
+  onGenerate: (startDate: string, endDate: string, requirements?: string, createShifts?: boolean) => Promise<void>;
   isLoading: boolean;
 }) {
   const nextWeekStart = startOfWeek(addWeeks(new Date(), 1), { weekStartsOn: 1 });
@@ -102,78 +122,187 @@ function GenerateScheduleDialog({
   const [requirements, setRequirements] = useState('');
   const [createShifts, setCreateShifts] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onGenerate(startDate, endDate, requirements || undefined, createShifts);
-    setDialogOpen(false);
+  // Timer for elapsed time
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (generating) {
+      interval = setInterval(() => {
+        setElapsedTime((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [generating]);
+
+  // Update current step based on elapsed time
+  useEffect(() => {
+    if (!generating) return;
+
+    let accumulated = 0;
+    for (let i = 0; i < GENERATION_STEPS.length; i++) {
+      accumulated += GENERATION_STEPS[i].duration;
+      if (elapsedTime < accumulated) {
+        setCurrentStep(i);
+        return;
+      }
+    }
+    setCurrentStep(GENERATION_STEPS.length - 1);
+  }, [elapsedTime, generating]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGenerating(true);
+    setElapsedTime(0);
+    setCurrentStep(0);
+
+    try {
+      await onGenerate(startDate, endDate, requirements || undefined, createShifts);
+      setDialogOpen(false);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const progressPercent = Math.min(
+    ((elapsedTime / 195) * 100), // 195 = total expected duration
+    95 // Cap at 95% until complete
+  );
+
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+    <Dialog open={dialogOpen} onOpenChange={(open) => !generating && setDialogOpen(open)}>
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <Sparkles className="h-4 w-4" />
           Generate Schedule
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className={generating ? 'sm:max-w-md' : ''}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
             AI Schedule Generator
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+
+        {generating ? (
+          <div className="space-y-6 py-4">
+            {/* Progress animation */}
+            <div className="flex justify-center">
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full border-4 border-muted flex items-center justify-center">
+                  <Sparkles className="h-10 w-10 text-primary animate-pulse" />
+                </div>
+                <div
+                  className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"
+                  style={{ animationDuration: '2s' }}
+                />
+              </div>
+            </div>
+
+            {/* Current step */}
+            <div className="text-center space-y-2">
+              <p className="text-lg font-medium">
+                {GENERATION_STEPS[currentStep]?.label || 'Processing...'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Elapsed time: {formatTime(elapsedTime)}
+              </p>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-2">
+              <Progress value={progressPercent} className="h-2" />
+              <p className="text-xs text-center text-muted-foreground">
+                This usually takes 2-4 minutes
+              </p>
+            </div>
+
+            {/* Steps list */}
+            <div className="space-y-2 pt-2">
+              {GENERATION_STEPS.map((step, index) => (
+                <div
+                  key={index}
+                  className={`flex items-center gap-2 text-sm ${
+                    index < currentStep
+                      ? 'text-green-600'
+                      : index === currentStep
+                        ? 'text-primary font-medium'
+                        : 'text-muted-foreground'
+                  }`}
+                >
+                  {index < currentStep ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : index === currentStep ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border-2 border-current" />
+                  )}
+                  {step.label.replace('...', '')}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Start Date</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label>End Date</Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
             <div>
-              <Label>Start Date</Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
+              <Label>Special Requirements (optional)</Label>
+              <Textarea
+                value={requirements}
+                onChange={(e) => setRequirements(e.target.value)}
+                placeholder="e.g., Need extra staff on Saturday, John requested morning shifts..."
+                rows={3}
               />
             </div>
-            <div>
-              <Label>End Date</Label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                required
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="create_shifts"
+                checked={createShifts}
+                onChange={(e) => setCreateShifts(e.target.checked)}
+                className="h-4 w-4"
               />
+              <Label htmlFor="create_shifts" className="font-normal">
+                Automatically create shifts (otherwise just get suggestions)
+              </Label>
             </div>
-          </div>
 
-          <div>
-            <Label>Special Requirements (optional)</Label>
-            <Textarea
-              value={requirements}
-              onChange={(e) => setRequirements(e.target.value)}
-              placeholder="e.g., Need extra staff on Saturday, John requested morning shifts..."
-              rows={3}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="create_shifts"
-              checked={createShifts}
-              onChange={(e) => setCreateShifts(e.target.checked)}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="create_shifts" className="font-normal">
-              Automatically create shifts (otherwise just get suggestions)
-            </Label>
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Generate Schedule
-          </Button>
-        </form>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Generate Schedule
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -209,21 +338,28 @@ export default function AssistantPage() {
     endDate: string,
     requirements?: string,
     createShifts?: boolean
-  ) => {
+  ): Promise<void> => {
     try {
-      await generateSchedule.mutateAsync({
+      const result = await generateSchedule.mutateAsync({
         startDate,
         endDate,
         requirements,
         createShifts,
       });
 
+      // Add a message showing the result
+      const shiftsCount = result.planning?.reduce(
+        (acc: number, day: any) => acc + (day.shifts?.length || 0),
+        0
+      ) || 0;
+
+      toast.success(`Schedule generated! ${shiftsCount} shifts created.`);
+
       // Ask AI to summarize the schedule
       sendMessage(`I just generated a schedule for ${format(new Date(startDate), 'MMM d')} - ${format(new Date(endDate), 'MMM d, yyyy')}. Please review it and let me know if there are any issues.`);
-
-      toast.success('Schedule generated! Check the calendar for details.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to generate schedule');
+      throw error; // Re-throw to let the dialog know it failed
     }
   };
 

@@ -71,6 +71,8 @@ export default function SettingsPage() {
     model: 'mistral',
     api_url: 'http://host.docker.internal:11434',
   });
+  const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -80,6 +82,29 @@ export default function SettingsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (llmConfig.provider === 'cerebras') {
+      fetchCerebrasModels();
+    }
+  }, [llmConfig.provider]);
+
+  async function fetchCerebrasModels() {
+    setIsLoadingModels(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/webhook'}/api/admin/cerebras-models`);
+      const data = await response.json();
+      if (data.success && data.models) {
+        setCerebrasModels(data.models);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Cerebras models:', error);
+      // Fallback to default models
+      setCerebrasModels(['llama-3.3-70b', 'llama3.1-8b', 'qwen-3-32b']);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }
 
   async function loadData() {
     setIsLoading(true);
@@ -360,17 +385,42 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="model">Model Name</Label>
-                <Input
-                  id="model"
-                  value={llmConfig.model}
-                  onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
-                  placeholder={llmConfig.provider === 'ollama' ? 'mistral' : 'llama-3.3-70b'}
-                />
+                <Label htmlFor="model">Model</Label>
+                {llmConfig.provider === 'cerebras' ? (
+                  <Select
+                    value={llmConfig.model}
+                    onValueChange={(value) => setLlmConfig({ ...llmConfig, model: value })}
+                    disabled={isLoadingModels}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={isLoadingModels ? "Loading models..." : "Select model"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cerebrasModels.length > 0 ? (
+                        cerebrasModels.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                            {model === 'llama-3.3-70b' && ' (Recommended)'}
+                            {model === 'llama3.1-8b' && ' (Fast)'}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="llama-3.3-70b">llama-3.3-70b</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="model"
+                    value={llmConfig.model}
+                    onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
+                    placeholder="mistral"
+                  />
+                )}
                 <p className="text-xs text-muted-foreground">
                   {llmConfig.provider === 'ollama'
                     ? 'e.g., mistral, llama3:8b, gemma2:9b'
-                    : 'e.g., llama-3.3-70b, llama-3.1-8b'}
+                    : 'Models are fetched from Cerebras API'}
                 </p>
               </div>
 

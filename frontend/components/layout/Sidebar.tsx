@@ -70,7 +70,7 @@ export function Sidebar() {
               Kosmo Kompany
             </p>
             <p className="text-xs text-muted-foreground">
-              Hua Hin & Sathorn
+              Kosmo & A la mer
             </p>
           </div>
         </div>
@@ -106,7 +106,7 @@ export function MobileNav() {
                   Kosmo Kompany
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Hua Hin & Sathorn
+                  Kosmo & A la mer
                 </p>
               </div>
             </div>

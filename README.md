@@ -1,8 +1,13 @@
 # Krooster
 
-**The smart scheduling system for Kosmo Kompany's Thai restaurants**
+**The smart scheduling system for Kosmo Kompany**
 
-Krooster is a modern employee scheduling application designed for managing two restaurant locations: **Hua Hin** (beachfront) and **Sathorn** (Bangkok). It features AI-powered schedule generation, leave management, and a conversational assistant named **Kruce**.
+Krooster is a modern employee scheduling application designed for managing two cosmopolitan restaurant locations serving European and Thai cuisine:
+
+- **Kosmo** - Bangkok
+- **A la mer by Kosmo** - Hua Hin beachfront
+
+It features AI-powered schedule generation, leave management, and a conversational assistant named **Kruce**.
 
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
@@ -166,4 +171,4 @@ Private project for Kosmo Kompany.
 
 ---
 
-Built with :coffee: for Hua Hin & Sathorn restaurants
+Built with :coffee: for Kosmo & A la mer by Kosmo

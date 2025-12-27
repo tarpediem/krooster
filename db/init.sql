@@ -1,5 +1,5 @@
--- Restaurant Scheduler - SQL Schema
--- Hua Hin & Sathorn
+-- Krooster - Restaurant Scheduler SQL Schema
+-- Kosmo Kompany: Kosmo (Bangkok) & A la mer by Kosmo (Hua Hin)
 
 -- Database for n8n
 CREATE DATABASE n8n;
@@ -160,22 +160,22 @@ HAVING COUNT(DISTINCT s.employee_id) < 3;
 
 -- Restaurants
 INSERT INTO restaurants (name, location, address) VALUES
-    ('Hua Hin', 'Beachfront - Hua Hin', 'Hua Hin Beach Road'),
-    ('Sathorn', 'Bangkok - Sathorn', 'Sathorn Road, Bangkok');
+    ('A la mer by Kosmo', 'Hua Hin Beachfront', '174/1 Naresdamri Rd, Hua Hin 77110'),
+    ('Kosmo', 'Sathorn, Bangkok', 'Sathorn, Bangkok');
 
 -- Test employees
 INSERT INTO employees (last_name, first_name, phone, restaurant_id, is_mobile, positions, hire_date) VALUES
-    -- Hua Hin team
+    -- A la mer by Kosmo team (Hua Hin)
     ('Somchai', 'Prasert', '081-234-5678', 1, FALSE, ARRAY['kitchen', 'dishwashing'], '2023-01-15'),
     ('Narin', 'Kaewkla', '082-345-6789', 1, FALSE, ARRAY['service', 'cashier'], '2023-03-01'),
     ('Pranee', 'Srisuk', '083-456-7890', 1, FALSE, ARRAY['kitchen', 'bar'], '2022-06-01'),
 
-    -- Sathorn team
+    -- Kosmo team (Bangkok)
     ('Wichai', 'Thongdee', '084-567-8901', 2, FALSE, ARRAY['kitchen'], '2022-09-01'),
     ('Suda', 'Boonmee', '085-678-9012', 2, FALSE, ARRAY['service', 'cashier'], '2023-02-15'),
     ('Apinya', 'Rattana', '086-789-0123', 2, FALSE, ARRAY['service', 'bar'], '2023-04-01'),
 
-    -- Mobile employees
+    -- Mobile employees (can work at both locations)
     ('Thanawat', 'Chaiporn', '087-890-1234', 1, TRUE, ARRAY['kitchen', 'service'], '2022-01-10'),
     ('Kannika', 'Worawit', '088-901-2345', 2, TRUE, ARRAY['service', 'bar', 'cashier'], '2022-05-20'),
     ('Pongpat', 'Siriwat', '089-012-3456', 1, TRUE, ARRAY['kitchen', 'dishwashing'], '2023-01-01'),

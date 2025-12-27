@@ -23,7 +23,7 @@ const navigation = [
   { name: 'Schedule', href: '/calendar', icon: Calendar },
   { name: 'Employees', href: '/employees', icon: Users },
   { name: 'Leave', href: '/leave', icon: CalendarOff },
-  { name: 'AI Assistant', href: '/assistant', icon: MessageSquare },
+  { name: 'Kruce', href: '/assistant', icon: MessageSquare },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -66,11 +66,11 @@ export function Sidebar() {
         <NavLinks />
         <div className="mt-auto">
           <div className="rounded-lg bg-muted p-4">
-            <p className="text-xs text-muted-foreground">
-              Hua Hin & Sathorn
+            <p className="text-xs font-medium text-muted-foreground">
+              Kosmo Kompany
             </p>
             <p className="text-xs text-muted-foreground">
-              Restaurant Scheduling
+              Hua Hin & Sathorn
             </p>
           </div>
         </div>
@@ -102,11 +102,11 @@ export function MobileNav() {
             </div>
             <div className="p-4">
               <div className="rounded-lg bg-muted p-4">
-                <p className="text-xs text-muted-foreground">
-                  Hua Hin & Sathorn
+                <p className="text-xs font-medium text-muted-foreground">
+                  Kosmo Kompany
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Restaurant Scheduling
+                  Hua Hin & Sathorn
                 </p>
               </div>
             </div>

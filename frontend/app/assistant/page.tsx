@@ -30,6 +30,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, addWeeks } from 'date-fns';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -313,6 +314,7 @@ export default function AssistantPage() {
   const generateSchedule = useGenerateSchedule();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -348,15 +350,21 @@ export default function AssistantPage() {
       });
 
       // Add a message showing the result
-      const shiftsCount = result.planning?.reduce(
+      const shiftsCount = result.shifts_created || result.planning?.reduce(
         (acc: number, day: any) => acc + (day.shifts?.length || 0),
         0
       ) || 0;
 
-      toast.success(`Schedule generated! ${shiftsCount} shifts created.`);
+      toast.success(`Schedule generated! ${shiftsCount} shifts created.`, {
+        action: {
+          label: 'View Calendar',
+          onClick: () => router.push('/calendar'),
+        },
+        duration: 10000,
+      });
 
       // Ask AI to summarize the schedule
-      sendMessage(`I just generated a schedule for ${format(new Date(startDate), 'MMM d')} - ${format(new Date(endDate), 'MMM d, yyyy')}. Please review it and let me know if there are any issues.`);
+      sendMessage(`I just generated a schedule for ${format(new Date(startDate), 'MMM d')} - ${format(new Date(endDate), 'MMM d, yyyy')} with ${shiftsCount} shifts. The schedule is now visible in the Calendar. Would you like me to review it for any issues?`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to generate schedule');
       throw error; // Re-throw to let the dialog know it failed
@@ -370,10 +378,10 @@ export default function AssistantPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Bot className="h-6 w-6" />
-            AI Assistant
+            Kruce
           </h1>
           <p className="text-muted-foreground">
-            Ask questions about schedules, staffing, and more
+            Your friendly scheduling assistant - ask about shifts, employees, and more
           </p>
         </div>
         <div className="flex gap-2">
@@ -423,9 +431,9 @@ export default function AssistantPage() {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <Bot className="h-16 w-16 mb-4 opacity-50" />
               <p className="text-center">
-                Hi! I'm your scheduling assistant. Ask me anything about
+                Hey there! I'm Kruce, your scheduling assistant.
                 <br />
-                shifts, employees, leave requests, or scheduling.
+                Ask me anything about shifts, employees, or scheduling!
               </p>
             </div>
           ) : (

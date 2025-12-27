@@ -134,6 +134,8 @@ export function useAIChat() {
 }
 
 export function useGenerateSchedule() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({
       startDate,
@@ -146,5 +148,9 @@ export function useGenerateSchedule() {
       requirements?: string;
       createShifts?: boolean;
     }) => generateSchedule(startDate, endDate, requirements, createShifts),
+    onSuccess: () => {
+      // Invalidate shifts so the calendar refetches
+      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+    },
   });
 }

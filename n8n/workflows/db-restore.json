@@ -1,0 +1,122 @@
+{
+  "name": "Database Restore",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/restore",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-restore",
+      "name": "Webhook Restore",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "restore-db"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst sqlContent = body.sql_content || '';\n\nif (!sqlContent.trim()) {\n  return { success: false, error: 'No SQL content provided' };\n}\n\nconst lines = sqlContent.split('\\n');\nconst statements = [];\nlet currentStatement = '';\n\nfor (const line of lines) {\n  const trimmed = line.trim();\n  if (trimmed.startsWith('--') || trimmed === '') continue;\n  currentStatement += ' ' + trimmed;\n  if (trimmed.endsWith(';')) {\n    statements.push(currentStatement.trim());\n    currentStatement = '';\n  }\n}\n\nif (currentStatement.trim()) {\n  statements.push(currentStatement.trim());\n}\n\nconst safeStatements = statements.filter(stmt => {\n  const upper = stmt.toUpperCase();\n  return upper.startsWith('INSERT ') || upper.startsWith('UPDATE ') || upper.startsWith('DELETE ');\n});\n\nreturn {\n  statements: safeStatements,\n  statement_count: safeStatements.length,\n  total_lines: lines.length\n};"
+      },
+      "id": "prepare-restore",
+      "name": "Prepare Restore",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM shifts;\nDELETE FROM absences;\nDELETE FROM missions;\nDELETE FROM availabilities;\nDELETE FROM leave_balance;\nDELETE FROM employees WHERE id > 0;\nSELECT setval('employees_id_seq', 1, false);\nSELECT setval('shifts_id_seq', 1, false);\nSELECT setval('absences_id_seq', 1, false);\nSELECT 'cleared' as status;",
+        "options": {}
+      },
+      "id": "clear-data",
+      "name": "Clear Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [720, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Restore').first().json;\nreturn { statements: prepData.statements, statement_count: prepData.statement_count };"
+      },
+      "id": "pass-statements",
+      "name": "Pass Statements",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.statements.join('; ') }}",
+        "options": {}
+      },
+      "id": "execute-restore",
+      "name": "Execute Restore",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1200, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Restore').first().json;\nconst result = $input.first().json;\nconst hasError = result.error !== undefined;\n\nif (hasError) {\n  return {\n    success: false,\n    error: result.error || 'Restore failed',\n    statement_count: prepData.statement_count\n  };\n}\n\nreturn {\n  success: true,\n  message: `Database restored. Executed ${prepData.statement_count} statements.`,\n  statement_count: prepData.statement_count\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Restore": {
+      "main": [[{"node": "Prepare Restore", "type": "main", "index": 0}]]
+    },
+    "Prepare Restore": {
+      "main": [[{"node": "Clear Data", "type": "main", "index": 0}]]
+    },
+    "Clear Data": {
+      "main": [[{"node": "Pass Statements", "type": "main", "index": 0}]]
+    },
+    "Pass Statements": {
+      "main": [[{"node": "Execute Restore", "type": "main", "index": 0}]]
+    },
+    "Execute Restore": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    },
+    "Format Response": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "triggerCount": 1,
+  "active": true
+}

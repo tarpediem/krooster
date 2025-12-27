@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Database,
   Download,
+  Upload,
   Trash2,
   AlertTriangle,
   Settings2,
@@ -21,6 +22,8 @@ import {
   CalendarOff,
   HardDrive,
   Zap,
+  FileUp,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,6 +81,10 @@ export default function SettingsPage() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [resetConfirmText, setResetConfirmText] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoreResult, setRestoreResult] = useState<{ success: boolean; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -259,6 +266,59 @@ export default function SettingsPage() {
       toast.success('Leave requests exported');
     } catch (error) {
       toast.error('Failed to export leave requests');
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.sql')) {
+        toast.error('Please select a .sql file');
+        return;
+      }
+      setRestoreFile(file);
+      setRestoreResult(null);
+    }
+  }
+
+  async function handleRestoreDatabase() {
+    if (!restoreFile) {
+      toast.error('Please select a backup file first');
+      return;
+    }
+
+    setIsRestoring(true);
+    setRestoreResult(null);
+
+    try {
+      const content = await restoreFile.text();
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/webhook'}/api/admin/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql_content: content }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setRestoreResult({ success: true, message: data.message || 'Database restored successfully' });
+        toast.success('Database restored successfully!');
+        setRestoreFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        loadData(); // Refresh stats
+      } else {
+        setRestoreResult({ success: false, message: data.error || 'Restore failed' });
+        toast.error(data.error || 'Failed to restore database');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Restore failed';
+      setRestoreResult({ success: false, message });
+      toast.error('Failed to restore database');
+    } finally {
+      setIsRestoring(false);
     }
   }
 
@@ -517,6 +577,103 @@ export default function SettingsPage() {
                 <Download className="mr-2 h-4 w-4" />
                 Download
               </Button>
+            </div>
+
+            {/* Restore */}
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                  <RotateCcw className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Restore Database</p>
+                  <p className="text-sm text-muted-foreground">
+                    Restore from a SQL backup file
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".sql"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="restore-file-input"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1"
+                  >
+                    <FileUp className="mr-2 h-4 w-4" />
+                    {restoreFile ? restoreFile.name : 'Select SQL File'}
+                  </Button>
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        disabled={!restoreFile || isRestoring}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {isRestoring ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                        )}
+                        Restore
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-orange-500" />
+                          Restore Database?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                          <span className="block">
+                            You are about to restore the database from:
+                          </span>
+                          <span className="block font-mono text-sm bg-muted p-2 rounded">
+                            {restoreFile?.name}
+                          </span>
+                          <span className="block text-orange-600">
+                            This will execute all SQL statements in the file. Make sure this is a valid backup file.
+                          </span>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleRestoreDatabase}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Yes, Restore Database
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+
+                {restoreResult && (
+                  <div
+                    className={`flex items-center gap-2 rounded-lg p-3 ${
+                      restoreResult.success
+                        ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+                        : 'bg-red-500/10 text-red-700 dark:text-red-400'
+                    }`}
+                  >
+                    {restoreResult.success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">{restoreResult.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <Separator />

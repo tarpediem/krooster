@@ -32,6 +32,7 @@ export interface CreateEmployeeData {
   is_mobile?: boolean;
   positions?: string[];
   hire_date?: string;
+  active?: boolean;
 }
 
 // Shift types
@@ -101,10 +102,25 @@ export interface LeaveBalance {
 }
 
 // AI types
+export interface AIAction {
+  type: 'add_employee' | 'remove_employee';
+  data: {
+    // For add_employee
+    first_name?: string;
+    last_name?: string;
+    restaurant_id?: number;
+    is_mobile?: boolean;
+    positions?: string[];
+    // For remove_employee
+    id?: number;
+  };
+}
+
 export interface AIMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  action?: AIAction;
 }
 
 export interface AIResponse {
@@ -113,6 +129,7 @@ export interface AIResponse {
   response: string;
   model: string;
   timestamp: string;
+  action?: AIAction;
 }
 
 export interface GeneratedSchedule {

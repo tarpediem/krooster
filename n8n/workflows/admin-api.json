@@ -171,6 +171,99 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "api/admin/restore",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-restore",
+      "name": "Webhook Restore",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 2500],
+      "webhookId": "admin-restore"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst sqlContent = body.sql_content || '';\n\nif (!sqlContent.trim()) {\n  return { success: false, error: 'No SQL content provided' };\n}\n\n// Parse the SQL content and extract INSERT statements\n// Filter out comments and empty lines\nconst lines = sqlContent.split('\\n');\nconst statements = [];\nlet currentStatement = '';\n\nfor (const line of lines) {\n  const trimmed = line.trim();\n  // Skip comments and empty lines\n  if (trimmed.startsWith('--') || trimmed === '') {\n    continue;\n  }\n  currentStatement += ' ' + trimmed;\n  if (trimmed.endsWith(';')) {\n    statements.push(currentStatement.trim());\n    currentStatement = '';\n  }\n}\n\nif (currentStatement.trim()) {\n  statements.push(currentStatement.trim());\n}\n\n// Filter to only allow safe statements (INSERT, UPDATE for restore)\nconst safeStatements = statements.filter(stmt => {\n  const upper = stmt.toUpperCase();\n  return upper.startsWith('INSERT ') || upper.startsWith('UPDATE ') || upper.startsWith('DELETE ');\n});\n\nreturn {\n  sql_content: sqlContent,\n  statements: safeStatements,\n  statement_count: safeStatements.length,\n  total_lines: lines.length\n};"
+      },
+      "id": "prepare-restore",
+      "name": "Prepare Restore",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 2500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- First, clear existing data to avoid conflicts\nDELETE FROM shifts;\nDELETE FROM absences;\nDELETE FROM missions;\nDELETE FROM availabilities;\nDELETE FROM leave_balance;\nDELETE FROM employees WHERE id > 0;\n\n-- Reset sequences\nSELECT setval('employees_id_seq', 1, false);\nSELECT setval('shifts_id_seq', 1, false);\nSELECT setval('absences_id_seq', 1, false);\n\nSELECT 'Database cleared for restore' as status;",
+        "options": {}
+      },
+      "id": "postgres-clear-for-restore",
+      "name": "Clear For Restore",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [720, 2500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Restore').first().json;\nconst statements = prepData.statements || [];\n\n// Execute each statement one by one\nlet results = [];\nlet errors = [];\nlet executed = 0;\n\nreturn {\n  statements: statements,\n  statement_count: statements.length,\n  ready: true\n};"
+      },
+      "id": "prepare-execute",
+      "name": "Prepare Execute",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 2500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.statements.join('; ') }}",
+        "options": {}
+      },
+      "id": "postgres-execute-restore",
+      "name": "Execute Restore SQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1200, 2500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Restore').first().json;\nconst result = $input.first().json;\nconst hasError = result.error !== undefined;\n\nif (hasError) {\n  return {\n    success: false,\n    error: result.error || 'Failed to execute restore statements',\n    statement_count: prepData.statement_count\n  };\n}\n\nreturn {\n  success: true,\n  message: `Database restored successfully. Executed ${prepData.statement_count} statements.`,\n  statement_count: prepData.statement_count,\n  total_lines: prepData.total_lines\n};"
+      },
+      "id": "format-restore",
+      "name": "Format Restore",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 2500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-restore",
+      "name": "Respond Restore",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1680, 2500]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
         "query": "SELECT\n  'planning' as database_name,\n  current_timestamp as backup_timestamp,\n  (\n    SELECT string_agg(\n      'INSERT INTO ' || tablename || ' SELECT * FROM ' || tablename || ';',\n      E'\\n'\n    )\n    FROM pg_tables\n    WHERE schemaname = 'public'\n  ) as backup_note,\n  (\n    SELECT json_agg(row_to_json(r))\n    FROM restaurants r\n  ) as restaurants,\n  (\n    SELECT json_agg(row_to_json(e))\n    FROM employees e\n  ) as employees,\n  (\n    SELECT json_agg(row_to_json(s))\n    FROM shifts s\n  ) as shifts,\n  (\n    SELECT json_agg(row_to_json(a))\n    FROM absences a\n  ) as absences,\n  (\n    SELECT json_agg(row_to_json(m))\n    FROM missions m\n  ) as missions,\n  (\n    SELECT json_agg(row_to_json(av))\n    FROM availabilities av\n  ) as availabilities,\n  (\n    SELECT json_agg(row_to_json(lb))\n    FROM leave_balance lb\n  ) as leave_balance;",
         "options": {}
@@ -807,6 +900,24 @@
     },
     "Format Export Leaves": {
       "main": [[{"node": "Respond Export Leaves", "type": "main", "index": 0}]]
+    },
+    "Webhook Restore": {
+      "main": [[{"node": "Prepare Restore", "type": "main", "index": 0}]]
+    },
+    "Prepare Restore": {
+      "main": [[{"node": "Clear For Restore", "type": "main", "index": 0}]]
+    },
+    "Clear For Restore": {
+      "main": [[{"node": "Prepare Execute", "type": "main", "index": 0}]]
+    },
+    "Prepare Execute": {
+      "main": [[{"node": "Execute Restore SQL", "type": "main", "index": 0}]]
+    },
+    "Execute Restore SQL": {
+      "main": [[{"node": "Format Restore", "type": "main", "index": 0}]]
+    },
+    "Format Restore": {
+      "main": [[{"node": "Respond Restore", "type": "main", "index": 0}]]
     }
   },
   "settings": {"executionOrder": "v1"},
@@ -823,6 +934,6 @@
       "updatedAt": "2024-01-01T00:00:00.000Z"
     }
   ],
-  "triggerCount": 12,
+  "triggerCount": 13,
   "active": true
 }

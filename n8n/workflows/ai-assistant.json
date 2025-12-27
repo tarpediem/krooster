@@ -17,13 +17,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const webhookData = $input.first().json;\nconst question = webhookData.body?.question || 'No question provided';\nconst systemPrompt = 'You are the scheduling assistant for two Thai restaurants: Hua Hin (seaside) and Sathorn (Bangkok), 200km apart. 3-4 mobile employees can work at either site. Be concise and helpful.';\nreturn {systemPrompt, question};"
+        "operation": "executeQuery",
+        "query": "SELECT json_build_object(\n  'employees', (SELECT json_agg(json_build_object(\n    'id', e.id,\n    'name', CONCAT(e.first_name, ' ', e.last_name),\n    'restaurant', r.name,\n    'is_mobile', e.is_mobile,\n    'positions', e.positions,\n    'active', e.active\n  )) FROM employees e LEFT JOIN restaurants r ON e.restaurant_id = r.id WHERE e.active = true),\n  'restaurants', (SELECT json_agg(json_build_object('id', id, 'name', name, 'location', location)) FROM restaurants)\n) as context;",
+        "options": {}
+      },
+      "id": "get-context",
+      "name": "Get Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhookData = $('Webhook Trigger').first().json;\nconst dbContext = $input.first().json.context;\nconst question = webhookData.body?.question || 'No question provided';\n\nconst employees = dbContext?.employees || [];\nconst restaurants = dbContext?.restaurants || [];\n\nconst employeeList = employees.map(e => \n  `- ${e.name} (ID: ${e.id}, ${e.restaurant || 'Unassigned'}, ${e.is_mobile ? 'Mobile' : 'Local'}, Positions: ${(e.positions || []).join('/')})`\n).join('\\n');\n\nconst restaurantList = restaurants.map(r => `- ${r.name} (ID: ${r.id}): ${r.location}`).join('\\n');\n\nconst systemPrompt = `You are the scheduling assistant for Krooster - a restaurant scheduling system managing two Thai restaurants.\n\nRESTAURANTS:\n${restaurantList}\n\nCURRENT ACTIVE EMPLOYEES (${employees.length} total):\n${employeeList || 'No employees yet'}\n\nYou can perform these ACTIONS when the user explicitly asks:\n\n1. ADD EMPLOYEE - When user wants to add/hire a new employee\n   Required: first_name, last_name, restaurant_id (1=Hua Hin, 2=Sathorn)\n   Optional: is_mobile (default false), positions array\n\n2. REMOVE EMPLOYEE - When user wants to remove/deactivate an employee\n   Required: employee id\n\nWhen an action is needed, include a JSON block in your response like this:\n\n\\`\\`\\`action\n{\"type\": \"add_employee\", \"data\": {\"first_name\": \"John\", \"last_name\": \"Smith\", \"restaurant_id\": 1, \"is_mobile\": false, \"positions\": [\"service\"]}}\n\\`\\`\\`\n\nor:\n\n\\`\\`\\`action\n{\"type\": \"remove_employee\", \"data\": {\"id\": 5}}\n\\`\\`\\`\n\nPositions: kitchen, service, bar, dishwashing, cashier\n\nIMPORTANT: \n- Only output action blocks when user EXPLICITLY asks to add or remove someone\n- Always confirm what you're about to do before the action block\n- For queries about employees, schedules, or general info, just respond naturally\n\nBe concise and helpful. Respond in the same language the user uses.`;\n\nreturn {systemPrompt, question, employeeCount: employees.length};"
       },
       "id": "prepare-prompt",
       "name": "Prepare Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 300]
+      "position": [720, 300]
     },
     {
       "parameters": {
@@ -40,20 +58,20 @@
       "name": "Call Cerebras",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.8,
-      "position": [720, 300],
+      "position": [960, 300],
       "credentials": {
         "openAiApi": {"id": "KmYMJqpoHOBmdlVC", "name": "Cerebras"}
       }
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.question;\nlet aiContent = response?.message?.content || response?.choices?.[0]?.message?.content || response?.content || 'Sorry, I could not generate a response.';\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  model: response?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "const response = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.question;\nlet aiContent = response?.message?.content || response?.choices?.[0]?.message?.content || response?.content || 'Sorry, I could not generate a response.';\n\n// Parse any action commands from the response\nlet action = null;\nconst actionMatch = aiContent.match(/```action\\s*([\\s\\S]*?)```/);\nif (actionMatch) {\n  try {\n    action = JSON.parse(actionMatch[1].trim());\n  } catch (e) {\n    // Invalid JSON, ignore\n  }\n}\n\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  action: action,\n  model: response?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-response",
       "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -65,11 +83,14 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1200, 300]
+      "position": [1440, 300]
     }
   ],
   "connections": {
     "Webhook Trigger": {
+      "main": [[{"node": "Get Context", "type": "main", "index": 0}]]
+    },
+    "Get Context": {
       "main": [[{"node": "Prepare Prompt", "type": "main", "index": 0}]]
     },
     "Prepare Prompt": {

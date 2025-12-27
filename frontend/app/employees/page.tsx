@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from '@/hooks/useEmployees';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Search, Phone, Mail, MapPin, Briefcase, Loader2, UserX } from 'lucide-react';
+import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Employee, CreateEmployeeData } from '@/lib/types';
 
@@ -18,6 +18,227 @@ const RESTAURANTS = [
   { id: 1, name: 'Hua Hin' },
   { id: 2, name: 'Sathorn' },
 ];
+
+const CSV_TEMPLATE = `first_name,last_name,phone,email,restaurant,is_mobile,positions
+John,Doe,081-234-5678,john@example.com,Hua Hin,false,"kitchen,service"
+Jane,Smith,082-345-6789,jane@example.com,Sathorn,true,"service,bar,cashier"`;
+
+function parseCSV(text: string): CreateEmployeeData[] {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const employees: CreateEmployeeData[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+
+    // Handle quoted fields (for positions like "kitchen,service")
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (const char of line) {
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+
+    const row: Record<string, string> = {};
+    headers.forEach((h, idx) => {
+      row[h] = values[idx] || '';
+    });
+
+    // Map restaurant name to ID
+    let restaurantId = 1;
+    const restName = row.restaurant?.toLowerCase();
+    if (restName?.includes('sathorn') || restName === '2') {
+      restaurantId = 2;
+    } else if (restName?.includes('hua') || restName === '1') {
+      restaurantId = 1;
+    }
+
+    // Parse positions
+    const positionsStr = row.positions || '';
+    const positions = positionsStr
+      .split(',')
+      .map(p => p.trim().toLowerCase())
+      .filter(p => POSITIONS.includes(p));
+
+    employees.push({
+      first_name: row.first_name || '',
+      last_name: row.last_name || '',
+      phone: row.phone || '',
+      email: row.email || '',
+      restaurant_id: restaurantId,
+      is_mobile: row.is_mobile?.toLowerCase() === 'true' || row.is_mobile === '1',
+      positions: positions.length > 0 ? positions : ['service'],
+    });
+  }
+
+  return employees.filter(e => e.first_name && e.last_name);
+}
+
+function downloadTemplate() {
+  const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'employees_template.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function ImportCSVDialog({
+  onImport,
+  isLoading,
+}: {
+  onImport: (employees: CreateEmployeeData[]) => Promise<void>;
+  isLoading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState<CreateEmployeeData[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = parseCSV(text);
+        if (parsed.length === 0) {
+          setError('No valid employees found in CSV');
+          setPreview([]);
+        } else {
+          setError(null);
+          setPreview(parsed);
+        }
+      } catch (err) {
+        setError('Failed to parse CSV file');
+        setPreview([]);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (preview.length === 0) return;
+    await onImport(preview);
+    setOpen(false);
+    setPreview([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Upload className="mr-2 h-4 w-4" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Import Employees from CSV
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Template Download */}
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+            <div>
+              <p className="font-medium">Download Template</p>
+              <p className="text-sm text-muted-foreground">
+                Get a CSV template with the correct format
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download className="mr-2 h-4 w-4" />
+              Template
+            </Button>
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <Label htmlFor="csv-file">Upload CSV File</Label>
+            <Input
+              ref={fileInputRef}
+              id="csv-file"
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              className="mt-1"
+            />
+          </div>
+
+          {/* Error */}
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+
+          {/* Preview */}
+          {preview.length > 0 && (
+            <div>
+              <Label>Preview ({preview.length} employees)</Label>
+              <div className="mt-2 max-h-48 overflow-auto border rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="text-left p-2">Name</th>
+                      <th className="text-left p-2">Restaurant</th>
+                      <th className="text-left p-2">Positions</th>
+                      <th className="text-left p-2">Mobile</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((emp, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="p-2">{emp.first_name} {emp.last_name}</td>
+                        <td className="p-2">{RESTAURANTS.find(r => r.id === emp.restaurant_id)?.name}</td>
+                        <td className="p-2">{emp.positions?.join(', ')}</td>
+                        <td className="p-2">{emp.is_mobile ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              onClick={handleImport}
+              disabled={preview.length === 0 || isLoading}
+              className="flex-1"
+            >
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Import {preview.length} Employee{preview.length !== 1 ? 's' : ''}
+            </Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function EmployeeCard({
   employee,
@@ -257,6 +478,31 @@ export default function EmployeesPage() {
     }
   };
 
+  const [importing, setImporting] = useState(false);
+
+  const handleImportCSV = async (employees: CreateEmployeeData[]) => {
+    setImporting(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const emp of employees) {
+      try {
+        await createMutation.mutateAsync(emp);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    setImporting(false);
+
+    if (errorCount === 0) {
+      toast.success(`Successfully imported ${successCount} employee${successCount !== 1 ? 's' : ''}`);
+    } else {
+      toast.warning(`Imported ${successCount}, failed ${errorCount}`);
+    }
+  };
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -274,16 +520,18 @@ export default function EmployeesPage() {
             {employees?.length || 0} staff members
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setSelectedEmployee(null);
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Employee
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <ImportCSVDialog onImport={handleImportCSV} isLoading={importing} />
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setSelectedEmployee(null);
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Employee
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
@@ -301,6 +549,7 @@ export default function EmployeesPage() {
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Filters */}

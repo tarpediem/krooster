@@ -69,7 +69,7 @@ CREATE TABLE employees (
     email VARCHAR(100),
     restaurant_id INTEGER REFERENCES restaurants(id),
     is_mobile BOOLEAN DEFAULT FALSE,
-    positions TEXT[], -- ARRAY: kitchen, service, bar, dishwashing, cashier
+    positions TEXT[], -- ARRAY: kitchen, service, bar, steward, cashier, runner, security, manager
     active BOOLEAN DEFAULT TRUE,
     hire_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

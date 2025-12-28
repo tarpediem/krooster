@@ -13,438 +13,165 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "webhookId": "ai-generate",
-      "position": [
-        240,
-        300
-      ]
+      "position": [240, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=SELECT e.id, e.last_name, e.first_name, e.positions, e.is_mobile, r.name AS restaurant_name, r.id AS restaurant_id\nFROM employees e\nJOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = TRUE\nAND e.id NOT IN (\n    SELECT employee_id FROM absences \n    WHERE status = 'approved' \n    AND '{{ $json.body.start_date || new Date().toISOString().split('T')[0] }}'::date BETWEEN start_date AND end_date\n)\nORDER BY r.name, e.last_name;",
+        "query": "SELECT e.id, e.last_name, e.first_name, e.positions, e.is_mobile, r.name AS restaurant_name, r.id AS restaurant_id, COALESCE(e.employment_type, 'full_time') AS employment_type, e.fixed_day_off, e.max_hours_per_week FROM employees e JOIN restaurants r ON e.restaurant_id = r.id WHERE e.active = TRUE ORDER BY r.id, e.last_name;",
         "options": {}
       },
       "id": "fetch-employees",
-      "name": "Fetch Available Employees",
+      "name": "Fetch Employees",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        480,
-        200
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "GvtIl9xYacgDPoso",
-          "name": "Planning PostgreSQL"
-        }
-      }
+      "position": [480, 200],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}}
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT a.id, a.employee_id, e.last_name, e.first_name, a.type, a.start_date, a.end_date, a.comment\nFROM absences a\nJOIN employees e ON a.employee_id = e.id\nWHERE a.status = 'approved'\nAND a.end_date >= CURRENT_DATE\nORDER BY a.start_date;",
+        "query": "SELECT employee_id, start_date, end_date FROM absences WHERE status = 'approved' AND end_date >= CURRENT_DATE;",
         "options": {}
       },
       "id": "fetch-leaves",
-      "name": "Fetch Approved Leaves",
+      "name": "Fetch Leaves",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        480,
-        400
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "GvtIl9xYacgDPoso",
-          "name": "Planning PostgreSQL"
-        }
-      }
+      "position": [480, 400],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}}
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id, name, location, opening_hours, closing_hours FROM restaurants ORDER BY id;",
-        "options": {}
-      },
-      "id": "fetch-restaurants",
-      "name": "Fetch Restaurants",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        480,
-        600
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "GvtIl9xYacgDPoso",
-          "name": "Planning PostgreSQL"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "mode": "append"
-      },
+      "parameters": {"mode": "append"},
       "id": "merge-data",
-      "name": "Merge All Data",
+      "name": "Merge",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [
-        720,
-        300
-      ]
+      "position": [720, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Prepare context for Ollama\nconst webhookData = $('Webhook Trigger').first().json;\nconst employees = $('Fetch Available Employees').all();\nconst leaves = $('Fetch Approved Leaves').all();\nconst restaurants = $('Fetch Restaurants').all();\n\nconst startDate = webhookData.body?.start_date || new Date().toISOString().split('T')[0];\nconst endDate = webhookData.body?.end_date || new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0];\nconst requirements = webhookData.body?.requirements || 'Standard planning';\n\nconst context = {\n  period: {\n    start: startDate,\n    end: endDate\n  },\n  restaurants: restaurants.map(r => r.json),\n  available_employees: employees.map(e => e.json),\n  approved_leaves: leaves.map(l => l.json),\n  requirements: requirements\n};\n\nconst systemPrompt = `You are the scheduling assistant for two restaurants belonging to the same owner:\n\nRESTAURANTS:\n- Hua Hin: seaside, dedicated local team\n- Sathorn: Bangkok, dedicated local team\n- Distance: 200km (3h drive)\n\nMOBILE EMPLOYEES:\n3-4 employees can perform missions at the other site.\nThey are housed on site during their missions.\n\nBUSINESS RULES:\n- Maximum shift: 8h/day\n- Mandatory break: 30min minimum for shifts > 5h\n- Rest between shifts: 11h minimum\n- Weekends: fair distribution over the month\n- Missions: max 2 per month per mobile employee (except emergency)\n- Minimum mission: 2 consecutive days\n- Minimum 3 employees per restaurant per day\n\nRESPONSE FORMAT:\nReturn a structured planning in JSON with the format:\n{\n  \"planning\": [\n    {\n      \"date\": \"YYYY-MM-DD\",\n      \"restaurant\": \"name\",\n      \"shifts\": [\n        {\n          \"employee_id\": id,\n          \"employee_name\": \"name\",\n          \"start_time\": \"HH:MM\",\n          \"end_time\": \"HH:MM\",\n          \"break_start\": \"HH:MM\" or null,\n          \"position\": \"position\",\n          \"is_mission\": boolean\n        }\n      ]\n    }\n  ],\n  \"alerts\": [\"list of detected problems\"],\n  \"suggestions\": [\"recommendations\"]\n}`;\n\nconst userMessage = `Here is the current data:\n${JSON.stringify(context, null, 2)}\n\nGenerate an optimal schedule for the period from ${startDate} to ${endDate}.\nSpecific requirements: ${requirements}`;\n\nreturn {\n  systemPrompt,\n  userMessage,\n  context\n};"
+        "jsCode": "// Algorithmic Schedule Generator with morning/afternoon shifts\nconst webhookData = $('Webhook Trigger').first().json;\nconst allEmployees = $('Fetch Employees').all().map(e => e.json);\nconst allLeaves = $('Fetch Leaves').all().map(l => l.json);\n\nconst startDate = new Date(webhookData.body?.start_date || new Date().toISOString().split('T')[0]);\nconst endDate = new Date(webhookData.body?.end_date || new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0]);\nconst createShifts = webhookData.body?.create_shifts === true;\nconst includeExtras = webhookData.body?.include_extras === true;\n\n// Two shifts per day: morning and afternoon\nconst SHIFTS = [\n  { name: 'morning', start: '10:00', end: '18:00', break_start: '14:00', hours: 8 },\n  { name: 'afternoon', start: '15:00', end: '23:00', break_start: '19:00', hours: 8 }\n];\n\n// Track hours worked per employee this week\nconst hoursWorked = {};\nallEmployees.forEach(e => { hoursWorked[e.id] = 0; });\n\n// Track who worked which shift today to avoid double-booking\nconst dailyAssignments = {};\n\n// Helper: check if employee is on leave\nfunction isOnLeave(empId, date) {\n  const d = date.toISOString().split('T')[0];\n  return allLeaves.some(l => \n    l.employee_id === empId && \n    d >= l.start_date && d <= l.end_date\n  );\n}\n\n// Helper: check if it's employee's fixed day off (0=Mon, 6=Sun)\nfunction isFixedDayOff(emp, date) {\n  if (emp.fixed_day_off === null || emp.fixed_day_off === undefined) return false;\n  const dayOfWeek = (date.getDay() + 6) % 7;\n  return emp.fixed_day_off === dayOfWeek;\n}\n\n// Helper: check if part-time employee would exceed their hours\nfunction wouldExceedHours(emp, hoursToAdd) {\n  if (emp.employment_type !== 'part_time' || !emp.max_hours_per_week) return false;\n  return (hoursWorked[emp.id] + hoursToAdd) > emp.max_hours_per_week;\n}\n\n// Helper: check if employee already assigned today\nfunction alreadyAssignedToday(empId, dateStr) {\n  return dailyAssignments[dateStr]?.includes(empId);\n}\n\nconst shifts = [];\nconst planning = [];\nconst alerts = [];\nlet currentDate = new Date(startDate);\n\nwhile (currentDate <= endDate) {\n  const dateStr = currentDate.toISOString().split('T')[0];\n  dailyAssignments[dateStr] = [];\n  \n  [1, 2].forEach(restaurantId => {\n    const restaurantName = restaurantId === 1 ? 'A la mer by Kosmo' : 'Kosmo';\n    const dayShifts = [];\n    \n    // Get available employees for this restaurant\n    const available = allEmployees.filter(e => {\n      if (e.restaurant_id !== restaurantId && !e.is_mobile) return false;\n      if (isOnLeave(e.id, currentDate)) return false;\n      if (isFixedDayOff(e, currentDate)) return false;\n      if (e.employment_type === 'extra' && !includeExtras) return false;\n      return true;\n    });\n    \n    // Sort: full-time first, then part-time, then extras\n    available.sort((a, b) => {\n      const order = { full_time: 0, part_time: 1, extra: 2 };\n      return (order[a.employment_type] || 0) - (order[b.employment_type] || 0);\n    });\n    \n    const dayIndex = Math.floor((currentDate - startDate) / (1000*60*60*24));\n    \n    // Assign to each shift (morning and afternoon)\n    SHIFTS.forEach((shiftType, shiftIdx) => {\n      let shiftCount = 0;\n      const minPerShift = 3;\n      \n      // Rotate employees between morning/afternoon based on day\n      const rotatedEmployees = [...available];\n      if ((dayIndex + shiftIdx) % 2 === 1) {\n        rotatedEmployees.reverse();\n      }\n      \n      rotatedEmployees.forEach((emp, idx) => {\n        // Skip if already assigned today (one shift per day per employee)\n        if (alreadyAssignedToday(emp.id, dateStr)) return;\n        \n        // Skip if we have enough for this shift\n        if (shiftCount >= 5) return;\n        \n        // Check part-time hours limit\n        if (wouldExceedHours(emp, shiftType.hours)) return;\n        \n        // Alternate assignment between shifts based on index + day\n        if (shiftCount >= minPerShift && (idx + dayIndex) % 2 !== shiftIdx) return;\n        \n        const positions = emp.positions || ['service'];\n        const position = positions[(dayIndex + idx) % positions.length];\n        const isMission = emp.restaurant_id !== restaurantId;\n        \n        const shift = {\n          employee_id: emp.id,\n          employee_name: `${emp.first_name} ${emp.last_name}`,\n          restaurant_id: restaurantId,\n          date: dateStr,\n          start_time: shiftType.start,\n          end_time: shiftType.end,\n          break_start: shiftType.break_start,\n          break_duration: 30,\n          position: position,\n          is_mission: isMission,\n          status: 'scheduled',\n          notes: `${shiftType.name}${emp.employment_type !== 'full_time' ? ' (' + emp.employment_type.replace('_', '-') + ')' : ''}`\n        };\n        \n        shifts.push(shift);\n        dayShifts.push(shift);\n        hoursWorked[emp.id] += shiftType.hours;\n        dailyAssignments[dateStr].push(emp.id);\n        shiftCount++;\n      });\n      \n      if (shiftCount < minPerShift) {\n        alerts.push(`${dateStr} ${restaurantName} ${shiftType.name}: Only ${shiftCount} employees (min ${minPerShift})`);\n      }\n    });\n    \n    planning.push({\n      date: dateStr,\n      restaurant: restaurantName,\n      shifts: dayShifts\n    });\n  });\n  \n  currentDate.setDate(currentDate.getDate() + 1);\n}\n\nconst suggestions = ['Schedule uses morning (10:00-18:00) and afternoon (15:00-23:00) shifts'];\nif (!includeExtras) suggestions.push('Extras not included - set include_extras=true to add them');\n\nreturn {\n  success: true,\n  create_shifts: createShifts,\n  period: {\n    start: startDate.toISOString().split('T')[0],\n    end: endDate.toISOString().split('T')[0]\n  },\n  planning: planning,\n  shifts: shifts,\n  total_shifts: shifts.length,\n  alerts: alerts,\n  suggestions: suggestions\n};"
       },
-      "id": "prepare-prompt",
-      "name": "Prepare AI Prompt",
+      "id": "generate-schedule",
+      "name": "Generate Schedule",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        960,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "modelId": {"__rl": true, "mode": "list", "value": "llama-3.3-70b"},
-        "messages": {
-          "values": [
-            {"role": "system", "content": "={{ $json.systemPrompt }}"},
-            {"role": "user", "content": "={{ $json.userMessage }}"}
-          ]
-        },
-        "options": {"maxTokens": 8192, "temperature": 0.3}
-      },
-      "id": "call-cerebras",
-      "name": "Call Cerebras AI",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.8,
-      "position": [1200, 300],
-      "credentials": {
-        "openAiApi": {"id": "KmYMJqpoHOBmdlVC", "name": "Cerebras"}
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse Cerebras/OpenAI response and extract planning\nconst response = $input.first().json;\nconst context = $('Prepare AI Prompt').first().json.context;\n\nlet aiContent = '';\nif (response.message?.content) {\n  aiContent = response.message.content;\n} else if (response.choices?.[0]?.message?.content) {\n  aiContent = response.choices[0].message.content;\n} else if (response.content) {\n  aiContent = response.content;\n}\n\n// Try to extract JSON from response\nlet planning = null;\nlet alerts = [];\nlet suggestions = [];\n\ntry {\n  // Look for JSON block in response\n  const jsonMatch = aiContent.match(/\\{[\\s\\S]*\\}/g);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[jsonMatch.length - 1]);\n    planning = parsed.planning || null;\n    alerts = parsed.alerts || [];\n    suggestions = parsed.suggestions || [];\n  }\n} catch (e) {\n  alerts.push('Error parsing AI response: ' + e.message);\n}\n\nreturn {\n  success: planning !== null,\n  period: context.period,\n  planning: planning,\n  alerts: alerts,\n  suggestions: suggestions,\n  raw_response: aiContent,\n  generated_at: new Date().toISOString()\n};"
-      },
-      "id": "parse-response",
-      "name": "Parse AI Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1440,
-        300
-      ]
+      "position": [960, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
           "conditions": [
             {
-              "id": "check-create-shifts",
-              "leftValue": "={{ $('Webhook Trigger').first().json.body.create_shifts }}",
+              "id": "check-create",
+              "leftValue": "={{ $json.create_shifts }}",
               "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            },
-            {
-              "id": "check-planning-exists",
-              "leftValue": "={{ Array.isArray($json.planning) && $json.planning.length > 0 }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
+              "operator": {"type": "boolean", "operation": "true"}
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "check-create-shifts",
-      "name": "Should Create Shifts?",
+      "id": "check-create",
+      "name": "Create Shifts?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        1680,
-        300
-      ]
+      "position": [1200, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Prepare shifts for database insertion\nconst planning = $input.first().json.planning;\nconst shifts = [];\n\nfor (const day of planning) {\n  const restaurantId = day.restaurant.toLowerCase().includes('hua') ? 1 : 2;\n  \n  for (const shift of day.shifts) {\n    shifts.push({\n      employee_id: shift.employee_id,\n      restaurant_id: restaurantId,\n      date: day.date,\n      start_time: shift.start_time,\n      end_time: shift.end_time,\n      break_start: shift.break_start || null,\n      break_duration: shift.break_start ? 30 : null,\n      position: shift.position,\n      is_mission: shift.is_mission || false,\n      status: 'scheduled',\n      notes: 'Generated by AI'\n    });\n  }\n}\n\nreturn shifts.map(s => ({ json: s }));"
+        "jsCode": "const data = $input.first().json;\nreturn data.shifts.map(s => ({ json: s }));"
       },
       "id": "prepare-shifts",
-      "name": "Prepare Shifts for DB",
+      "name": "Prepare Shifts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1920,
-        200
-      ]
+      "position": [1440, 200]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO shifts (employee_id, restaurant_id, date, start_time, end_time, break_start, break_duration, position, is_mission, status, notes) VALUES ({{ $json.employee_id }}, {{ $json.restaurant_id }}, '{{ $json.date }}', '{{ $json.start_time }}', '{{ $json.end_time }}', {{ $json.break_start ? \"'\" + $json.break_start + \"'\" : 'NULL' }}, {{ $json.break_duration || 'NULL' }}, '{{ $json.position }}', {{ $json.is_mission }}, '{{ $json.status }}', '{{ $json.notes }}') RETURNING *;",
+        "query": "=INSERT INTO shifts (employee_id, restaurant_id, date, start_time, end_time, break_start, break_duration, position, is_mission, status, notes) VALUES ({{ $json.employee_id }}, {{ $json.restaurant_id }}, '{{ $json.date }}', '{{ $json.start_time }}', '{{ $json.end_time }}', '{{ $json.break_start }}', {{ $json.break_duration }}, '{{ $json.position }}', {{ $json.is_mission }}, '{{ $json.status }}', '{{ $json.notes }}') RETURNING id;",
         "options": {}
       },
       "id": "insert-shifts",
       "name": "Insert Shifts",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [
-        2160,
-        200
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "GvtIl9xYacgDPoso",
-          "name": "Planning PostgreSQL"
-        }
-      }
+      "position": [1680, 200],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}}
     },
     {
       "parameters": {
-        "jsCode": "// Prepare final response with created shifts info\nconst parsedResponse = $('Parse AI Response').first().json;\nconst insertedShifts = $('Insert Shifts').all();\n\nreturn {\n  success: true,\n  message: 'Schedule generated and shifts created successfully',\n  period: parsedResponse.period,\n  planning: parsedResponse.planning,\n  shifts_created: insertedShifts.length,\n  alerts: parsedResponse.alerts,\n  suggestions: parsedResponse.suggestions,\n  generated_at: parsedResponse.generated_at\n};"
+        "jsCode": "const data = $('Generate Schedule').first().json;\nconst inserted = $('Insert Shifts').all();\nreturn {\n  success: true,\n  message: `Created ${inserted.length} shifts`,\n  period: data.period,\n  shifts_created: inserted.length,\n  planning: data.planning\n};"
       },
-      "id": "response-with-shifts",
-      "name": "Response With Created Shifts",
+      "id": "response-created",
+      "name": "Response Created",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2400,
-        200
-      ]
+      "position": [1920, 200]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
-        "options": {
-          "responseCode": 200,
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          }
-        }
+        "options": {}
       },
-      "id": "respond-with-shifts",
-      "name": "Respond (Shifts Created)",
+      "id": "respond-created",
+      "name": "Respond Created",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        2640,
-        200
-      ]
+      "position": [2160, 200]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
-        "options": {
-          "responseCode": 200,
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          }
-        }
+        "options": {}
       },
-      "id": "respond-suggestion-only",
-      "name": "Respond (Suggestion Only)",
+      "id": "respond-preview",
+      "name": "Respond Preview",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        1920,
-        400
-      ]
+      "position": [1440, 400]
     }
   ],
   "connections": {
     "Webhook Trigger": {
+      "main": [[{"node": "Fetch Employees", "type": "main", "index": 0}, {"node": "Fetch Leaves", "type": "main", "index": 0}]]
+    },
+    "Fetch Employees": {
+      "main": [[{"node": "Merge", "type": "main", "index": 0}]]
+    },
+    "Fetch Leaves": {
+      "main": [[{"node": "Merge", "type": "main", "index": 1}]]
+    },
+    "Merge": {
+      "main": [[{"node": "Generate Schedule", "type": "main", "index": 0}]]
+    },
+    "Generate Schedule": {
+      "main": [[{"node": "Create Shifts?", "type": "main", "index": 0}]]
+    },
+    "Create Shifts?": {
       "main": [
-        [
-          {
-            "node": "Fetch Available Employees",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Fetch Approved Leaves",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Fetch Restaurants",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Prepare Shifts", "type": "main", "index": 0}],
+        [{"node": "Respond Preview", "type": "main", "index": 0}]
       ]
     },
-    "Fetch Available Employees": {
-      "main": [
-        [
-          {
-            "node": "Merge All Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Approved Leaves": {
-      "main": [
-        [
-          {
-            "node": "Merge All Data",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Fetch Restaurants": {
-      "main": [
-        [
-          {
-            "node": "Merge All Data",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "Merge All Data": {
-      "main": [
-        [
-          {
-            "node": "Prepare AI Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare AI Prompt": {
-      "main": [
-        [
-          {
-            "node": "Call Cerebras AI",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call Cerebras AI": {
-      "main": [
-        [
-          {
-            "node": "Parse AI Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse AI Response": {
-      "main": [
-        [
-          {
-            "node": "Should Create Shifts?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Should Create Shifts?": {
-      "main": [
-        [
-          {
-            "node": "Prepare Shifts for DB",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond (Suggestion Only)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Shifts for DB": {
-      "main": [
-        [
-          {
-            "node": "Insert Shifts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Prepare Shifts": {
+      "main": [[{"node": "Insert Shifts", "type": "main", "index": 0}]]
     },
     "Insert Shifts": {
-      "main": [
-        [
-          {
-            "node": "Response With Created Shifts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Response Created", "type": "main", "index": 0}]]
     },
-    "Response With Created Shifts": {
-      "main": [
-        [
-          {
-            "node": "Respond (Shifts Created)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Response Created": {
+      "main": [[{"node": "Respond Created", "type": "main", "index": 0}]]
     }
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "AI",
-      "id": "ai-tag"
-    },
-    {
-      "name": "Planning",
-      "id": "planning-tag"
-    }
-  ],
+  "settings": {"executionOrder": "v1"},
   "triggerCount": 1,
-  "updatedAt": "2025-01-01T00:00:00.000Z",
-  "versionId": "1"
+  "active": true
 }

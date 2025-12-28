@@ -72,7 +72,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO employees (last_name, first_name, phone, email, restaurant_id, is_mobile, positions, active, hire_date)\nVALUES (\n  '{{ $json.body.last_name }}',\n  '{{ $json.body.first_name }}',\n  '{{ $json.body.phone }}',\n  '{{ $json.body.email }}',\n  {{ $json.body.restaurant_id }},\n  {{ $json.body.is_mobile || false }},\n  ARRAY[{{ $json.body.positions ? $json.body.positions.map(p => \"'\" + p + \"'\").join(',') : '' }}]::TEXT[],\n  {{ $json.body.active !== false }},\n  {{ $json.body.hire_date ? \"'\" + $json.body.hire_date + \"'\" : 'CURRENT_DATE' }}\n)\nRETURNING *;",
+        "query": "INSERT INTO employees (last_name, first_name, phone, email, restaurant_id, is_mobile, positions, active, hire_date, employment_type, fixed_day_off, max_hours_per_week)\nVALUES (\n  '{{ $json.body.last_name }}',\n  '{{ $json.body.first_name }}',\n  '{{ $json.body.phone }}',\n  '{{ $json.body.email }}',\n  {{ $json.body.restaurant_id }},\n  {{ $json.body.is_mobile || false }},\n  ARRAY[{{ $json.body.positions ? $json.body.positions.map(p => \"'\" + p + \"'\").join(',') : '' }}]::TEXT[],\n  {{ $json.body.active !== false }},\n  {{ $json.body.hire_date ? \"'\" + $json.body.hire_date + \"'\" : 'CURRENT_DATE' }},\n  '{{ $json.body.employment_type || 'full_time' }}',\n  {{ $json.body.fixed_day_off !== undefined && $json.body.fixed_day_off !== null ? $json.body.fixed_day_off : 'NULL' }},\n  {{ $json.body.max_hours_per_week ? $json.body.max_hours_per_week : 'NULL' }}\n)\nRETURNING *;",
         "options": {}
       },
       "id": "postgres-create",
@@ -94,7 +94,10 @@
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT e.*, r.name as restaurant_name\nFROM employees e\nLEFT JOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = TRUE\nORDER BY e.last_name, e.first_name;",
-        "options": {}
+        "options": {
+          "outputLargeData": true,
+          "nodeVersion": 2.4
+        }
       },
       "id": "postgres-list",
       "name": "List Employees",
@@ -109,12 +112,13 @@
           "id": "GvtIl9xYacgDPoso",
           "name": "PostgreSQL Planning"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE employees SET\n  last_name = CASE WHEN '{{ $json.body.last_name || '' }}' = '' THEN last_name ELSE '{{ $json.body.last_name }}' END,\n  first_name = CASE WHEN '{{ $json.body.first_name || '' }}' = '' THEN first_name ELSE '{{ $json.body.first_name }}' END,\n  phone = CASE WHEN '{{ $json.body.phone || '' }}' = '' THEN phone ELSE '{{ $json.body.phone }}' END,\n  email = CASE WHEN '{{ $json.body.email || '' }}' = '' THEN email ELSE '{{ $json.body.email }}' END\nWHERE id = {{ $json.query.id }}\nRETURNING *;",
+        "query": "={{ 'UPDATE employees SET ' + Object.entries($json.body).filter(([k,v]) => k !== 'id' && v !== undefined).map(([k,v]) => { if (k === 'positions') return `positions = ARRAY[${v.map(p => \"'\" + p + \"'\").join(',')}]::TEXT[]`; if (k === 'is_mobile') return `is_mobile = ${v}`; if (k === 'restaurant_id') return `restaurant_id = ${v}`; if (k === 'fixed_day_off') return v === null ? 'fixed_day_off = NULL' : `fixed_day_off = ${v}`; if (k === 'max_hours_per_week') return v === null ? 'max_hours_per_week = NULL' : `max_hours_per_week = ${v}`; return `${k} = '${v}'`; }).join(', ') + ` WHERE id = ${$json.body.id} RETURNING *;` }}",
         "options": {}
       },
       "id": "postgres-update",
@@ -171,7 +175,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json) } }}",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json).filter(item => item.id !== undefined) } }}",
         "options": {}
       },
       "id": "respond-list",

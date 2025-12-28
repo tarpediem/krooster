@@ -11,17 +11,34 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Employee, CreateEmployeeData } from '@/lib/types';
+import type { Employee, CreateEmployeeData, EmploymentType } from '@/lib/types';
+import { DAYS_OF_WEEK, EMPLOYMENT_TYPE_LABELS, EMPLOYMENT_TYPE_COLORS } from '@/lib/types';
 
-const POSITIONS = ['kitchen', 'service', 'bar', 'dishwasher', 'cashier'];
+const POSITIONS = ['kitchen', 'service', 'bar', 'steward', 'cashier', 'runner', 'security', 'manager'];
+const EMPLOYMENT_TYPES: EmploymentType[] = ['full_time', 'part_time', 'extra'];
 const RESTAURANTS = [
   { id: 1, name: 'Hua Hin' },
   { id: 2, name: 'Sathorn' },
 ];
 
-const CSV_TEMPLATE = `first_name,last_name,phone,email,restaurant,is_mobile,positions
-John,Doe,081-234-5678,john@example.com,Hua Hin,false,"kitchen,service"
-Jane,Smith,082-345-6789,jane@example.com,Sathorn,true,"service,bar,cashier"`;
+// CSV TEMPLATE WITH ALL POSSIBLE VALUES:
+// restaurant: "Hua Hin" or "Sathorn" (or "A la mer" / "Kosmo")
+// is_mobile: true/false (can work at both locations)
+// positions: kitchen, service, bar, steward, cashier, runner, security, manager (comma-separated in quotes)
+// employment_type: full_time, part_time, extra
+// fixed_day_off: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday (or leave empty)
+// max_hours_per_week: number (mainly for part_time, leave empty for full_time)
+const CSV_TEMPLATE = `first_name,last_name,phone,email,restaurant,is_mobile,positions,employment_type,fixed_day_off,max_hours_per_week
+# FULL-TIME EXAMPLES (regular staff)
+Som,Chai,081-111-1111,som@kosmo.com,Hua Hin,false,"kitchen,service",full_time,,
+Narin,Kaew,081-222-2222,narin@kosmo.com,Hua Hin,true,"service,bar,cashier",full_time,Sunday,
+Pim,Siri,081-333-3333,pim@kosmo.com,Sathorn,false,manager,full_time,Monday,
+# PART-TIME EXAMPLES (limited hours per week)
+Lek,Student,082-444-4444,lek@email.com,Hua Hin,false,service,part_time,Wednesday,20
+Fah,Helper,082-555-5555,fah@email.com,Sathorn,false,"runner,steward",part_time,Saturday,24
+# EXTRA EXAMPLES (on-call staff)
+Ton,Extra,083-666-6666,ton@email.com,Hua Hin,false,service,extra,,
+Dao,OnCall,083-777-7777,dao@email.com,Sathorn,true,"kitchen,steward",extra,,`;
 
 function parseCSV(text: string): CreateEmployeeData[] {
   const lines = text.trim().split('\n');
@@ -32,7 +49,7 @@ function parseCSV(text: string): CreateEmployeeData[] {
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.trim()) continue;
+    if (!line.trim() || line.trim().startsWith('#')) continue;
 
     // Handle quoted fields (for positions like "kitchen,service")
     const values: string[] = [];
@@ -72,6 +89,24 @@ function parseCSV(text: string): CreateEmployeeData[] {
       .map(p => p.trim().toLowerCase())
       .filter(p => POSITIONS.includes(p));
 
+    // Parse employment type
+    const empType = row.employment_type?.toLowerCase() || 'full_time';
+    const validEmpTypes = ['full_time', 'part_time', 'extra'];
+    const employment_type = validEmpTypes.includes(empType) ? empType as EmploymentType : 'full_time';
+
+    // Parse fixed day off (Monday=0, Sunday=6)
+    const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const dayOffStr = row.fixed_day_off?.toLowerCase() || '';
+    let fixed_day_off: number | null = null;
+    if (dayOffStr) {
+      const dayIndex = dayNames.findIndex(d => d.startsWith(dayOffStr.substring(0, 3)));
+      if (dayIndex !== -1) fixed_day_off = dayIndex;
+    }
+
+    // Parse max hours per week
+    const maxHours = parseInt(row.max_hours_per_week || '', 10);
+    const max_hours_per_week = !isNaN(maxHours) && maxHours > 0 ? maxHours : null;
+
     employees.push({
       first_name: row.first_name || '',
       last_name: row.last_name || '',
@@ -80,10 +115,13 @@ function parseCSV(text: string): CreateEmployeeData[] {
       restaurant_id: restaurantId,
       is_mobile: row.is_mobile?.toLowerCase() === 'true' || row.is_mobile === '1',
       positions: positions.length > 0 ? positions : ['service'],
+      employment_type,
+      fixed_day_off,
+      max_hours_per_week,
     });
   }
 
-  return employees.filter(e => e.first_name && e.last_name);
+  return employees.filter(e => e.first_name); // last_name is optional
 }
 
 function downloadTemplate() {
@@ -250,6 +288,8 @@ function EmployeeCard({
   onDelete: (id: number) => void;
 }) {
   const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`.toUpperCase();
+  const employmentType = employee.employment_type || 'full_time';
+  const employmentColor = EMPLOYMENT_TYPE_COLORS[employmentType] || 'bg-gray-500';
 
   return (
     <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onEdit(employee)}>
@@ -261,10 +301,13 @@ function EmployeeCard({
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold truncate">
                 {employee.first_name} {employee.last_name}
               </h3>
+              <Badge className={`text-xs text-white ${employmentColor}`}>
+                {EMPLOYMENT_TYPE_LABELS[employmentType]}
+              </Badge>
               {employee.is_mobile && (
                 <Badge variant="secondary" className="text-xs">Mobile</Badge>
               )}
@@ -277,6 +320,16 @@ function EmployeeCard({
               <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                 <Phone className="h-3 w-3" />
                 {employee.phone}
+              </div>
+            )}
+            {employee.fixed_day_off !== null && employee.fixed_day_off !== undefined && (
+              <div className="mt-1 text-sm text-muted-foreground">
+                Off: <span className="font-medium">{DAYS_OF_WEEK[employee.fixed_day_off]}</span>
+              </div>
+            )}
+            {employee.employment_type === 'part_time' && employee.max_hours_per_week && (
+              <div className="mt-1 text-sm text-muted-foreground">
+                Max: <span className="font-medium">{employee.max_hours_per_week}h/week</span>
               </div>
             )}
             <div className="mt-2 flex flex-wrap gap-1">
@@ -312,6 +365,9 @@ function EmployeeForm({
     restaurant_id: employee?.restaurant_id || 1,
     is_mobile: employee?.is_mobile || false,
     positions: employee?.positions || [],
+    employment_type: employee?.employment_type || 'full_time',
+    fixed_day_off: employee?.fixed_day_off ?? null,
+    max_hours_per_week: employee?.max_hours_per_week ?? null,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -371,18 +427,64 @@ function EmployeeForm({
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="restaurant">Restaurant</Label>
-        <select
-          id="restaurant"
-          value={formData.restaurant_id}
-          onChange={(e) => setFormData({ ...formData, restaurant_id: Number(e.target.value) })}
-          className="w-full h-10 px-3 rounded-md border border-input bg-background"
-        >
-          {RESTAURANTS.map((r) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
-          ))}
-        </select>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="restaurant">Restaurant</Label>
+          <select
+            id="restaurant"
+            value={formData.restaurant_id}
+            onChange={(e) => setFormData({ ...formData, restaurant_id: Number(e.target.value) })}
+            className="w-full h-10 px-3 rounded-md border border-input bg-background"
+          >
+            {RESTAURANTS.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="employment_type">Employment Type</Label>
+          <select
+            id="employment_type"
+            value={formData.employment_type || 'full_time'}
+            onChange={(e) => setFormData({ ...formData, employment_type: e.target.value as EmploymentType })}
+            className="w-full h-10 px-3 rounded-md border border-input bg-background"
+          >
+            {EMPLOYMENT_TYPES.map((type) => (
+              <option key={type} value={type}>{EMPLOYMENT_TYPE_LABELS[type]}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="fixed_day_off">Fixed Day Off</Label>
+          <select
+            id="fixed_day_off"
+            value={formData.fixed_day_off ?? ''}
+            onChange={(e) => setFormData({ ...formData, fixed_day_off: e.target.value === '' ? null : Number(e.target.value) })}
+            className="w-full h-10 px-3 rounded-md border border-input bg-background"
+          >
+            <option value="">No fixed day off</option>
+            {DAYS_OF_WEEK.map((day, index) => (
+              <option key={index} value={index}>{day}</option>
+            ))}
+          </select>
+        </div>
+        {formData.employment_type === 'part_time' && (
+          <div>
+            <Label htmlFor="max_hours">Max Hours/Week</Label>
+            <Input
+              id="max_hours"
+              type="number"
+              min="1"
+              max="40"
+              value={formData.max_hours_per_week || ''}
+              onChange={(e) => setFormData({ ...formData, max_hours_per_week: e.target.value ? Number(e.target.value) : null })}
+              placeholder="e.g., 20"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -433,7 +535,7 @@ export default function EmployeesPage() {
 
   const [search, setSearch] = useState('');
   const [filterRestaurant, setFilterRestaurant] = useState<number | null>(null);
-  const [filterMobile, setFilterMobile] = useState<boolean | null>(null);
+  const [filterEmploymentType, setFilterEmploymentType] = useState<EmploymentType | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
@@ -442,8 +544,8 @@ export default function EmployeesPage() {
       emp.first_name?.toLowerCase().includes(search.toLowerCase()) ||
       emp.last_name?.toLowerCase().includes(search.toLowerCase());
     const matchesRestaurant = filterRestaurant === null || emp.restaurant_id === filterRestaurant;
-    const matchesMobile = filterMobile === null || emp.is_mobile === filterMobile;
-    return matchesSearch && matchesRestaurant && matchesMobile;
+    const matchesEmploymentType = filterEmploymentType === null || emp.employment_type === filterEmploymentType;
+    return matchesSearch && matchesRestaurant && matchesEmploymentType;
   });
 
   const handleSave = async (data: CreateEmployeeData) => {
@@ -574,13 +676,14 @@ export default function EmployeesPage() {
           ))}
         </select>
         <select
-          value={filterMobile === null ? '' : filterMobile.toString()}
-          onChange={(e) => setFilterMobile(e.target.value === '' ? null : e.target.value === 'true')}
+          value={filterEmploymentType ?? ''}
+          onChange={(e) => setFilterEmploymentType(e.target.value === '' ? null : e.target.value as EmploymentType)}
           className="h-10 px-3 rounded-md border border-input bg-background"
         >
           <option value="">All Types</option>
-          <option value="true">Mobile Only</option>
-          <option value="false">Local Only</option>
+          {EMPLOYMENT_TYPES.map((type) => (
+            <option key={type} value={type}>{EMPLOYMENT_TYPE_LABELS[type]}</option>
+          ))}
         </select>
       </div>
 

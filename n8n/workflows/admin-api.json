@@ -781,6 +781,188 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [960, 2300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/rules",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-get-rules",
+      "name": "Webhook Get Rules",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 2700],
+      "webhookId": "admin-get-rules"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT key, value, description, updated_at FROM shift_rules ORDER BY key;",
+        "options": {}
+      },
+      "id": "postgres-get-rules",
+      "name": "Get Shift Rules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 2700],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\nconst rules = {};\nfor (const row of rows) {\n  rules[row.key] = {\n    value: row.value,\n    description: row.description,\n    updated_at: row.updated_at\n  };\n}\nreturn {\n  success: true,\n  rules: rules,\n  count: rows.length\n};"
+      },
+      "id": "format-get-rules",
+      "name": "Format Get Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 2700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-get-rules",
+      "name": "Respond Get Rules",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 2700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/admin/rules",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-put-rules",
+      "name": "Webhook Put Rules",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 2900],
+      "webhookId": "admin-put-rules"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst rules = body.rules || {};\nconst updates = [];\nfor (const [key, value] of Object.entries(rules)) {\n  updates.push({ key, value: String(value) });\n}\nreturn { updates };"
+      },
+      "id": "prepare-put-rules",
+      "name": "Prepare Put Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 2900]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.updates.map(u => `UPDATE shift_rules SET value = '${u.value}', updated_at = CURRENT_TIMESTAMP WHERE key = '${u.key}'`).join('; ') }};",
+        "options": {}
+      },
+      "id": "postgres-put-rules",
+      "name": "Update Shift Rules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [720, 2900],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Put Rules').first().json;\nreturn {\n  success: true,\n  message: `Updated ${prepData.updates.length} rule(s)`,\n  updated: prepData.updates.map(u => u.key)\n};"
+      },
+      "id": "format-put-rules",
+      "name": "Format Put Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 2900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-put-rules",
+      "name": "Respond Put Rules",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 2900]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/admin/employee-hours",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-employee-hours",
+      "name": "Webhook Employee Hours",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 3100],
+      "webhookId": "admin-employee-hours"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst dateFrom = query.date_from || new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];\nconst dateTo = query.date_to || new Date().toISOString().split('T')[0];\nconst restaurantId = query.restaurant_id || null;\nreturn { date_from: dateFrom, date_to: dateTo, restaurant_id: restaurantId };"
+      },
+      "id": "prepare-employee-hours",
+      "name": "Prepare Employee Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 3100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT\n    e.id,\n    e.first_name,\n    e.last_name,\n    r.name as restaurant,\n    COUNT(s.id) as total_shifts,\n    COALESCE(SUM(EXTRACT(EPOCH FROM (s.end_time::time - s.start_time::time))/3600), 0) as total_hours,\n    COALESCE(SUM(CASE WHEN s.break_duration > 0 THEN s.break_duration ELSE 0 END), 0) as total_break_minutes,\n    COALESCE(SUM(EXTRACT(EPOCH FROM (s.end_time::time - s.start_time::time))/3600) - SUM(CASE WHEN s.break_duration > 0 THEN s.break_duration/60.0 ELSE 0 END), 0) as net_hours\nFROM employees e\nLEFT JOIN shifts s ON e.id = s.employee_id\n    AND s.status != 'cancelled'\n    AND s.date BETWEEN '{{ $json.date_from }}' AND '{{ $json.date_to }}'\nLEFT JOIN restaurants r ON e.restaurant_id = r.id\nWHERE e.active = true\n{{ $json.restaurant_id ? \"AND e.restaurant_id = \" + $json.restaurant_id : '' }}\nGROUP BY e.id, e.first_name, e.last_name, r.name\nORDER BY net_hours DESC;",
+        "options": {}
+      },
+      "id": "postgres-employee-hours",
+      "name": "Get Employee Hours",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [720, 3100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "Planning PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepData = $('Prepare Employee Hours').first().json;\nconst rows = $input.all().map(item => ({\n  id: item.json.id,\n  first_name: item.json.first_name,\n  last_name: item.json.last_name,\n  restaurant: item.json.restaurant,\n  total_shifts: parseInt(item.json.total_shifts) || 0,\n  total_hours: parseFloat(item.json.total_hours).toFixed(1),\n  total_break_minutes: parseInt(item.json.total_break_minutes) || 0,\n  net_hours: parseFloat(item.json.net_hours).toFixed(1)\n}));\nreturn {\n  success: true,\n  period: { from: prepData.date_from, to: prepData.date_to },\n  employees: rows,\n  count: rows.length\n};"
+      },
+      "id": "format-employee-hours",
+      "name": "Format Employee Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 3100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-employee-hours",
+      "name": "Respond Employee Hours",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 3100]
     }
   ],
   "connections": {
@@ -918,6 +1100,39 @@
     },
     "Format Restore": {
       "main": [[{"node": "Respond Restore", "type": "main", "index": 0}]]
+    },
+    "Webhook Get Rules": {
+      "main": [[{"node": "Get Shift Rules", "type": "main", "index": 0}]]
+    },
+    "Get Shift Rules": {
+      "main": [[{"node": "Format Get Rules", "type": "main", "index": 0}]]
+    },
+    "Format Get Rules": {
+      "main": [[{"node": "Respond Get Rules", "type": "main", "index": 0}]]
+    },
+    "Webhook Put Rules": {
+      "main": [[{"node": "Prepare Put Rules", "type": "main", "index": 0}]]
+    },
+    "Prepare Put Rules": {
+      "main": [[{"node": "Update Shift Rules", "type": "main", "index": 0}]]
+    },
+    "Update Shift Rules": {
+      "main": [[{"node": "Format Put Rules", "type": "main", "index": 0}]]
+    },
+    "Format Put Rules": {
+      "main": [[{"node": "Respond Put Rules", "type": "main", "index": 0}]]
+    },
+    "Webhook Employee Hours": {
+      "main": [[{"node": "Prepare Employee Hours", "type": "main", "index": 0}]]
+    },
+    "Prepare Employee Hours": {
+      "main": [[{"node": "Get Employee Hours", "type": "main", "index": 0}]]
+    },
+    "Get Employee Hours": {
+      "main": [[{"node": "Format Employee Hours", "type": "main", "index": 0}]]
+    },
+    "Format Employee Hours": {
+      "main": [[{"node": "Respond Employee Hours", "type": "main", "index": 0}]]
     }
   },
   "settings": {"executionOrder": "v1"},
@@ -934,6 +1149,6 @@
       "updatedAt": "2024-01-01T00:00:00.000Z"
     }
   ],
-  "triggerCount": 13,
+  "triggerCount": 16,
   "active": true
 }

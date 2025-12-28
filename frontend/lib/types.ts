@@ -7,6 +7,12 @@ export interface Restaurant {
   closing_time: string;
 }
 
+// Employment types
+export type EmploymentType = 'full_time' | 'part_time' | 'extra';
+
+// Day of week (0=Monday, 6=Sunday)
+export const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
 // Employee types
 export interface Employee {
   id: number;
@@ -20,6 +26,9 @@ export interface Employee {
   positions: string[];
   active: boolean;
   hire_date?: string;
+  fixed_day_off?: number | null; // 0-6 (Mon-Sun)
+  employment_type: EmploymentType;
+  max_hours_per_week?: number | null;
   created_at?: string;
 }
 
@@ -33,7 +42,23 @@ export interface CreateEmployeeData {
   positions?: string[];
   hire_date?: string;
   active?: boolean;
+  fixed_day_off?: number | null;
+  employment_type?: EmploymentType;
+  max_hours_per_week?: number | null;
 }
+
+// Employment type labels
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  full_time: 'Full-time',
+  part_time: 'Part-time',
+  extra: 'Extra',
+};
+
+export const EMPLOYMENT_TYPE_COLORS: Record<EmploymentType, string> = {
+  full_time: 'bg-green-500',
+  part_time: 'bg-blue-500',
+  extra: 'bg-orange-500',
+};
 
 // Shift types
 export interface Shift {
@@ -168,8 +193,11 @@ export const POSITION_COLORS: Record<string, string> = {
   kitchen: 'bg-orange-500',
   service: 'bg-blue-500',
   bar: 'bg-purple-500',
-  dishwasher: 'bg-gray-500',
+  steward: 'bg-gray-500',
   cashier: 'bg-green-500',
+  runner: 'bg-cyan-500',
+  security: 'bg-red-500',
+  manager: 'bg-indigo-500',
   default: 'bg-slate-500',
 };
 

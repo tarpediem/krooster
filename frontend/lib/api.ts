@@ -291,3 +291,60 @@ export async function exportLeavesCSV(): Promise<Blob> {
   }
   return response.blob();
 }
+
+// ============ SHIFT RULES ============
+
+export interface ShiftRule {
+  value: string;
+  description: string;
+  updated_at: string;
+}
+
+export interface ShiftRules {
+  [key: string]: ShiftRule;
+}
+
+export async function getShiftRules(): Promise<ShiftRules> {
+  const result = await fetchAPI<{ success: boolean; rules: ShiftRules }>('/api/admin/rules');
+  return result.rules || {};
+}
+
+export async function saveShiftRules(rules: Record<string, string>): Promise<void> {
+  await fetchAPI('/api/admin/rules', {
+    method: 'PUT',
+    body: JSON.stringify({ rules }),
+  });
+}
+
+// ============ EMPLOYEE HOURS REPORT ============
+
+export interface EmployeeHoursData {
+  id: number;
+  first_name: string;
+  last_name: string;
+  restaurant: string;
+  total_shifts: number;
+  total_hours: string;
+  total_break_minutes: number;
+  net_hours: string;
+}
+
+export interface EmployeeHoursReport {
+  success: boolean;
+  period: { from: string; to: string };
+  employees: EmployeeHoursData[];
+  count: number;
+}
+
+export async function getEmployeeHours(dateFrom?: string, dateTo?: string, restaurantId?: number): Promise<EmployeeHoursReport> {
+  const params = new URLSearchParams();
+  if (dateFrom) params.append('date_from', dateFrom);
+  if (dateTo) params.append('date_to', dateTo);
+  if (restaurantId) params.append('restaurant_id', String(restaurantId));
+
+  const query = params.toString();
+  const endpoint = query ? `/api/admin/employee-hours?${query}` : '/api/admin/employee-hours';
+
+  const result = await fetchAPI<EmployeeHoursReport>(endpoint);
+  return result;
+}

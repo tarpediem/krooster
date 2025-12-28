@@ -31,6 +31,9 @@ CREATE TABLE employees (
     positions TEXT[],
     active BOOLEAN DEFAULT TRUE,
     hire_date DATE,
+    fixed_day_off INTEGER CHECK (fixed_day_off BETWEEN 0 AND 6), -- 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+    employment_type VARCHAR(20) DEFAULT 'full_time' CHECK (employment_type IN ('full_time', 'part_time', 'extra')),
+    max_hours_per_week INTEGER, -- For part-time employees
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -105,6 +108,26 @@ CREATE TABLE leave_balance (
     UNIQUE(employee_id, year)
 );
 
+-- Shift rules configuration
+CREATE TABLE shift_rules (
+    id SERIAL PRIMARY KEY,
+    key VARCHAR(50) UNIQUE NOT NULL,
+    value VARCHAR(100) NOT NULL,
+    description TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Default shift rules
+INSERT INTO shift_rules (key, value, description) VALUES
+    ('max_shift_hours', '8', 'Maximum hours per shift'),
+    ('min_break_threshold', '5', 'Hours after which break is mandatory'),
+    ('min_break_duration', '30', 'Minimum break duration in minutes'),
+    ('min_rest_between_shifts', '11', 'Minimum rest hours between shifts'),
+    ('min_employees_per_day', '3', 'Minimum employees per restaurant per day'),
+    ('max_hours_per_week', '40', 'Maximum hours per week before overtime'),
+    ('max_missions_per_month', '2', 'Maximum inter-site missions per employee per month'),
+    ('min_mission_days', '2', 'Minimum consecutive days for a mission');
+
 -- ============================================
 -- USEFUL VIEWS
 -- ============================================
@@ -166,7 +189,7 @@ INSERT INTO restaurants (name, location, address) VALUES
 -- Test employees
 INSERT INTO employees (last_name, first_name, phone, restaurant_id, is_mobile, positions, hire_date) VALUES
     -- A la mer by Kosmo team (Hua Hin)
-    ('Somchai', 'Prasert', '081-234-5678', 1, FALSE, ARRAY['kitchen', 'dishwashing'], '2023-01-15'),
+    ('Somchai', 'Prasert', '081-234-5678', 1, FALSE, ARRAY['kitchen', 'steward'], '2023-01-15'),
     ('Narin', 'Kaewkla', '082-345-6789', 1, FALSE, ARRAY['service', 'cashier'], '2023-03-01'),
     ('Pranee', 'Srisuk', '083-456-7890', 1, FALSE, ARRAY['kitchen', 'bar'], '2022-06-01'),
 
@@ -178,7 +201,7 @@ INSERT INTO employees (last_name, first_name, phone, restaurant_id, is_mobile, p
     -- Mobile employees (can work at both locations)
     ('Thanawat', 'Chaiporn', '087-890-1234', 1, TRUE, ARRAY['kitchen', 'service'], '2022-01-10'),
     ('Kannika', 'Worawit', '088-901-2345', 2, TRUE, ARRAY['service', 'bar', 'cashier'], '2022-05-20'),
-    ('Pongpat', 'Siriwat', '089-012-3456', 1, TRUE, ARRAY['kitchen', 'dishwashing'], '2023-01-01'),
+    ('Pongpat', 'Siriwat', '089-012-3456', 1, TRUE, ARRAY['kitchen', 'steward'], '2023-01-01'),
     ('Malai', 'Tongjai', '080-123-4567', 2, TRUE, ARRAY['service', 'kitchen'], '2023-06-01');
 
 -- Leave balance 2025

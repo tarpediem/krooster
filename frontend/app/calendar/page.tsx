@@ -53,7 +53,7 @@ const RESTAURANTS = [
   { id: 2, name: 'Sathorn', color: 'bg-orange-500' },
 ];
 
-const POSITIONS = ['kitchen', 'service', 'bar', 'dishwasher', 'cashier'];
+const POSITIONS = ['kitchen', 'service', 'bar', 'steward', 'cashier', 'runner', 'security', 'manager'];
 
 type ViewMode = 'week' | 'month' | 'day';
 

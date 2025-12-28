@@ -1,0 +1,36 @@
+first_name,last_name,phone,email,restaurant,is_mobile,positions,employment_type,fixed_day_off,max_hours_per_week
+AH TAWNG,,,,Sathorn,true,service,full_time,,48
+ALUM,,,,Sathorn,false,steward,full_time,,48
+ATU,,,,Sathorn,false,kitchen,full_time,,48
+AUM,,,,Sathorn,true,service,full_time,,48
+AYE BKK,,,,Sathorn,true,service,full_time,,48
+BIE,,,,Sathorn,false,kitchen,full_time,,48
+BUBU,,,,Sathorn,false,service,full_time,,48
+CHUE,,,,Sathorn,false,service,full_time,,48
+CREAM,,,,Sathorn,true,cashier,full_time,,48
+DAN HKAWNG,,,,Sathorn,false,bar,full_time,,48
+FAI,,,,Sathorn,false,service,full_time,,48
+HTET,,,,Sathorn,false,bar,full_time,,48
+IRIS,,,,Sathorn,false,service,full_time,,48
+JA AUNG,,,,Sathorn,true,service,full_time,,48
+JUWELL,,,,Sathorn,false,kitchen,full_time,,48
+LI,,,,Sathorn,false,kitchen,full_time,,48
+LULU,,,,Sathorn,true,service,full_time,,48
+MALI,,,,Sathorn,false,"steward,service",full_time,,48
+MOE,,,,Sathorn,true,kitchen,full_time,,48
+MYO,,950602630,,Sathorn,true,bar,full_time,,48
+NID,,,,Sathorn,false,service,full_time,,48
+NONO,,,,Sathorn,false,kitchen,full_time,,48
+PAN,,,,Sathorn,true,service,full_time,,48
+PHYOE,,,,Sathorn,false,service,full_time,,48
+TEE,,,,Sathorn,false,bar,full_time,,48
+THURA,,,,Sathorn,false,"kitchen,bar",full_time,,48
+ZIN MIN,,,,Sathorn,false,kitchen,full_time,,48
+AYE HH,,,,Hua Hin,false,kitchen,full_time,,48
+DAO,,,,Hua Hin,false,service,full_time,,48
+DER DER,,,,Hua Hin,false,service,full_time,,48
+NANG,,,,Hua Hin,false,service,full_time,,48
+NOK,,,,Hua Hin,false,kitchen,full_time,,48
+PUI,,835436879,,Hua Hin,false,kitchen,full_time,Monday,48
+SAYN,,,,Hua Hin,false,kitchen,full_time,,48
+CHEF BRUCE,,942939038,bn@kosmokompany.com,Sathorn,true,manager,full_time,,48

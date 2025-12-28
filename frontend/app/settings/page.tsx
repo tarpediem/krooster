@@ -24,6 +24,12 @@ import {
   Zap,
   FileUp,
   RotateCcw,
+  Clock,
+  Timer,
+  Coffee,
+  Moon,
+  UserCheck,
+  MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,8 +68,11 @@ import {
   exportEmployeesCSV,
   exportShiftsCSV,
   exportLeavesCSV,
+  getShiftRules,
+  saveShiftRules,
   type AdminStats,
   type LLMConfig,
+  type ShiftRules,
 } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -85,6 +94,9 @@ export default function SettingsPage() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreResult, setRestoreResult] = useState<{ success: boolean; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [shiftRules, setShiftRules] = useState<ShiftRules>({});
+  const [editedRules, setEditedRules] = useState<Record<string, string>>({});
+  const [isSavingRules, setIsSavingRules] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -116,12 +128,20 @@ export default function SettingsPage() {
   async function loadData() {
     setIsLoading(true);
     try {
-      const [statsData, configData] = await Promise.all([
+      const [statsData, configData, rulesData] = await Promise.all([
         getAdminStats().catch(() => ({ employee_count: 0, shift_count: 0, leave_count: 0 })),
         getLLMConfig().catch(() => ({ provider: 'ollama' as const, model: 'mistral', api_url: 'http://host.docker.internal:11434' })),
+        getShiftRules().catch(() => ({})),
       ]);
       setStats(statsData);
       setLlmConfig(configData);
+      setShiftRules(rulesData);
+      // Initialize edited rules with current values
+      const initialEdits: Record<string, string> = {};
+      Object.entries(rulesData).forEach(([key, rule]) => {
+        initialEdits[key] = rule.value;
+      });
+      setEditedRules(initialEdits);
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -267,6 +287,23 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error('Failed to export leave requests');
     }
+  }
+
+  async function handleSaveRules() {
+    setIsSavingRules(true);
+    try {
+      await saveShiftRules(editedRules);
+      toast.success('Shift rules saved successfully');
+      loadData(); // Reload to get updated timestamps
+    } catch (error) {
+      toast.error('Failed to save shift rules');
+    } finally {
+      setIsSavingRules(false);
+    }
+  }
+
+  function handleRuleChange(key: string, value: string) {
+    setEditedRules(prev => ({ ...prev, [key]: value }));
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -549,6 +586,173 @@ export default function SettingsPage() {
                 Save Settings
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Shift Rules */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-indigo-600" />
+              <CardTitle>Shift Rules</CardTitle>
+            </div>
+            <CardDescription>Configure scheduling constraints and business rules</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Shift Duration */}
+              <div className="space-y-2">
+                <Label htmlFor="max_shift_hours" className="flex items-center gap-2">
+                  <Timer className="h-4 w-4 text-muted-foreground" />
+                  Max Shift Hours
+                </Label>
+                <Input
+                  id="max_shift_hours"
+                  type="number"
+                  min="1"
+                  max="12"
+                  value={editedRules.max_shift_hours || ''}
+                  onChange={(e) => handleRuleChange('max_shift_hours', e.target.value)}
+                  placeholder="8"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.max_shift_hours?.description}</p>
+              </div>
+
+              {/* Break Threshold */}
+              <div className="space-y-2">
+                <Label htmlFor="min_break_threshold" className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-muted-foreground" />
+                  Break Required After
+                </Label>
+                <Input
+                  id="min_break_threshold"
+                  type="number"
+                  min="1"
+                  max="8"
+                  value={editedRules.min_break_threshold || ''}
+                  onChange={(e) => handleRuleChange('min_break_threshold', e.target.value)}
+                  placeholder="5"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.min_break_threshold?.description}</p>
+              </div>
+
+              {/* Break Duration */}
+              <div className="space-y-2">
+                <Label htmlFor="min_break_duration" className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-muted-foreground" />
+                  Min Break (minutes)
+                </Label>
+                <Input
+                  id="min_break_duration"
+                  type="number"
+                  min="15"
+                  max="120"
+                  value={editedRules.min_break_duration || ''}
+                  onChange={(e) => handleRuleChange('min_break_duration', e.target.value)}
+                  placeholder="30"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.min_break_duration?.description}</p>
+              </div>
+
+              {/* Rest Between Shifts */}
+              <div className="space-y-2">
+                <Label htmlFor="min_rest_between_shifts" className="flex items-center gap-2">
+                  <Moon className="h-4 w-4 text-muted-foreground" />
+                  Min Rest Hours
+                </Label>
+                <Input
+                  id="min_rest_between_shifts"
+                  type="number"
+                  min="8"
+                  max="24"
+                  value={editedRules.min_rest_between_shifts || ''}
+                  onChange={(e) => handleRuleChange('min_rest_between_shifts', e.target.value)}
+                  placeholder="11"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.min_rest_between_shifts?.description}</p>
+              </div>
+
+              {/* Min Employees */}
+              <div className="space-y-2">
+                <Label htmlFor="min_employees_per_day" className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  Min Employees/Day
+                </Label>
+                <Input
+                  id="min_employees_per_day"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={editedRules.min_employees_per_day || ''}
+                  onChange={(e) => handleRuleChange('min_employees_per_day', e.target.value)}
+                  placeholder="3"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.min_employees_per_day?.description}</p>
+              </div>
+
+              {/* Max Weekly Hours */}
+              <div className="space-y-2">
+                <Label htmlFor="max_hours_per_week" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  Max Hours/Week
+                </Label>
+                <Input
+                  id="max_hours_per_week"
+                  type="number"
+                  min="20"
+                  max="60"
+                  value={editedRules.max_hours_per_week || ''}
+                  onChange={(e) => handleRuleChange('max_hours_per_week', e.target.value)}
+                  placeholder="40"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.max_hours_per_week?.description}</p>
+              </div>
+
+              {/* Max Missions */}
+              <div className="space-y-2">
+                <Label htmlFor="max_missions_per_month" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  Max Missions/Month
+                </Label>
+                <Input
+                  id="max_missions_per_month"
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={editedRules.max_missions_per_month || ''}
+                  onChange={(e) => handleRuleChange('max_missions_per_month', e.target.value)}
+                  placeholder="2"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.max_missions_per_month?.description}</p>
+              </div>
+
+              {/* Min Mission Days */}
+              <div className="space-y-2">
+                <Label htmlFor="min_mission_days" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  Min Mission Days
+                </Label>
+                <Input
+                  id="min_mission_days"
+                  type="number"
+                  min="1"
+                  max="14"
+                  value={editedRules.min_mission_days || ''}
+                  onChange={(e) => handleRuleChange('min_mission_days', e.target.value)}
+                  placeholder="2"
+                />
+                <p className="text-xs text-muted-foreground">{shiftRules.min_mission_days?.description}</p>
+              </div>
+            </div>
+
+            <Button onClick={handleSaveRules} disabled={isSavingRules} className="w-full sm:w-auto">
+              {isSavingRules ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              Save Rules
+            </Button>
           </CardContent>
         </Card>
 

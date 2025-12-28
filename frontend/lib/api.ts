@@ -207,8 +207,15 @@ export interface LLMConfig {
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
-  const result = await fetchAPI<APIResponse<AdminStats>>('/api/admin/stats');
-  return result.data || { employee_count: 0, shift_count: 0, leave_count: 0 };
+  const result = await fetchAPI<{ success: boolean; stats: { employees: { total: number }; shifts: { total: number }; absences: { total: number } } }>('/api/admin/stats');
+  if (result.stats) {
+    return {
+      employee_count: result.stats.employees?.total || 0,
+      shift_count: result.stats.shifts?.total || 0,
+      leave_count: result.stats.absences?.total || 0,
+    };
+  }
+  return { employee_count: 0, shift_count: 0, leave_count: 0 };
 }
 
 export async function getLLMConfig(): Promise<LLMConfig> {

@@ -103,45 +103,57 @@ export default function WelcomePage() {
   return (
     <div className="space-y-12 pb-12">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 px-6 py-12 sm:px-12 sm:py-16">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-        <div className="relative">
+      <div className="relative overflow-hidden rounded-2xl">
+        {/* Background Image */}
+        <div className="absolute inset-0">
+          <Image
+            src="/hero-kosmo.png"
+            alt="Kosmo Restaurant"
+            fill
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
+        </div>
+
+        {/* Content */}
+        <div className="relative px-6 py-16 sm:px-12 sm:py-24">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-white shadow-lg p-2">
+            <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-white/90 backdrop-blur shadow-lg p-2">
               <Image src="/logo.png" alt="Krooster" width={72} height={72} />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-center sm:text-5xl mb-4">
+          <h1 className="text-4xl font-bold text-center sm:text-5xl mb-4 text-white drop-shadow-lg">
             Welcome to Krooster
           </h1>
-          <p className="text-xl text-muted-foreground text-center max-w-2xl mx-auto mb-8">
-            Your smart scheduling system for Hua Hin & Sathorn restaurants
+          <p className="text-xl text-white/90 text-center max-w-2xl mx-auto mb-8 drop-shadow">
+            Smart scheduling for Kosmo Kompany
           </p>
 
           {/* Restaurant Cards */}
           <div className="grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
-            <div className="flex items-center gap-4 rounded-xl bg-card p-4 shadow-sm border">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10">
+            <div className="flex items-center gap-4 rounded-xl bg-white/90 backdrop-blur p-4 shadow-lg">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/20">
                 <MapPin className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <h3 className="font-semibold">Hua Hin</h3>
-                <p className="text-sm text-muted-foreground">Beachfront Restaurant</p>
+                <h3 className="font-semibold">A la mer by Kosmo</h3>
+                <p className="text-sm text-muted-foreground">Hua Hin Beachfront</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 rounded-xl bg-card p-4 shadow-sm border">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
+            <div className="flex items-center gap-4 rounded-xl bg-white/90 backdrop-blur p-4 shadow-lg">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
                 <MapPin className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <h3 className="font-semibold">Sathorn</h3>
-                <p className="text-sm text-muted-foreground">Bangkok City Restaurant</p>
+                <h3 className="font-semibold">Kosmo</h3>
+                <p className="text-sm text-muted-foreground">Sathorn, Bangkok</p>
               </div>
             </div>
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mt-4">
-            200km apart &bull; 3-4 mobile employees can work at either location
+          <p className="text-center text-sm text-white/80 mt-4">
+            European & Thai Cuisine &bull; 200km apart &bull; Mobile staff between locations
           </p>
         </div>
       </div>
@@ -244,6 +256,9 @@ export default function WelcomePage() {
             </Button>
           </Link>
         </div>
+        <p className="text-sm text-muted-foreground mt-6">
+          If you are lost or don't know how to use this app, ask Jean-Marie!
+        </p>
       </div>
     </div>
   );

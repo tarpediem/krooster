@@ -45,13 +45,37 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get API key from environment or use the one provided\nconst CEREBRAS_API_KEY = $env.CEREBRAS_API_KEY || 'YOUR_CEREBRAS_API_KEY_HERE';\n\nconst systemPrompt = $input.first().json.systemPrompt;\nconst question = $input.first().json.question;\n\nconst response = await fetch('https://api.cerebras.ai/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${CEREBRAS_API_KEY}`\n  },\n  body: JSON.stringify({\n    model: 'llama-3.3-70b',\n    messages: [\n      { role: 'system', content: systemPrompt },\n      { role: 'user', content: question }\n    ],\n    max_tokens: 2048,\n    temperature: 0.7\n  })\n});\n\nconst data = await response.json();\n\nif (!response.ok) {\n  return {\n    success: false,\n    error: data.error?.message || 'API call failed',\n    status: response.status\n  };\n}\n\nconst aiContent = data?.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';\n\nreturn {\n  success: true,\n  question: question,\n  response: aiContent,\n  model: data?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "=Bearer {{ $env.CEREBRAS_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b', messages: [{role: 'system', content: $json.systemPrompt}, {role: 'user', content: $json.question}], max_tokens: 2048, temperature: 0.7 }) }}",
+        "options": {
+          "timeout": 60000
+        }
       },
       "id": "call-cerebras",
       "name": "Call Cerebras",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.question;\nlet aiContent = response?.choices?.[0]?.message?.content || response?.message?.content || response?.content || response?.text || 'Sorry, I could not generate a response.';\n\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  model: response?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -63,7 +87,7 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1200, 300]
+      "position": [1440, 300]
     }
   ],
   "connections": {
@@ -77,6 +101,9 @@
       "main": [[{"node": "Call Cerebras", "type": "main", "index": 0}]]
     },
     "Call Cerebras": {
+      "main": [[{"node": "Format Response", "type": "main", "index": 0}]]
+    },
+    "Format Response": {
       "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
     }
   },

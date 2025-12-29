@@ -45,27 +45,27 @@
     },
     {
       "parameters": {
-        "modelId": {"__rl": true, "mode": "list", "value": "llama-3.3-70b"},
-        "messages": {
-          "values": [
-            {"role": "system", "content": "={{ $json.systemPrompt }}"},
-            {"role": "user", "content": "={{ $json.question }}"}
-          ]
-        },
-        "options": {"maxTokens": 2048, "temperature": 0.7, "baseURL": "https://api.cerebras.ai/v1"}
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b', messages: [{role: 'system', content: $json.systemPrompt}, {role: 'user', content: $json.question}], max_tokens: 2048, temperature: 0.7 }) }}",
+        "options": {}
       },
       "id": "call-cerebras",
       "name": "Call Cerebras",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [960, 300],
       "credentials": {
-        "openAiApi": {"id": "atGx0kh8PfIttF1y", "name": "Cerebras"}
+        "httpHeaderAuth": {"id": "atGx0kh8PfIttF1y", "name": "Cerebras"}
       }
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.question;\nlet aiContent = response?.message?.content || response?.choices?.[0]?.message?.content || response?.content || response?.text || 'Sorry, I could not generate a response.';\n\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  model: response?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "const response = $input.first().json;\nconst originalQuestion = $('Prepare Prompt').first().json.question;\nlet aiContent = response?.choices?.[0]?.message?.content || response?.message?.content || response?.content || response?.text || 'Sorry, I could not generate a response.';\n\nreturn {\n  success: true,\n  question: originalQuestion,\n  response: aiContent,\n  model: response?.model || 'llama-3.3-70b',\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-response",
       "name": "Format Response",

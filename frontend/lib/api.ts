@@ -126,6 +126,23 @@ export async function cancelShift(id: number): Promise<void> {
   });
 }
 
+// ============ RESTAURANTS ============
+
+import type { Restaurant } from './types';
+
+export async function getRestaurants(): Promise<Restaurant[]> {
+  const result = await fetchAPI<APIResponse<Restaurant[]>>('/api/restaurants');
+  return result.data || [];
+}
+
+export async function updateRestaurant(id: number, data: Partial<Restaurant>): Promise<Restaurant> {
+  const result = await fetchAPI<APIResponse<Restaurant>>(`/api/restaurants/update?id=${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return result.data!;
+}
+
 // ============ MISSIONS ============
 
 export interface GetMissionsParams {

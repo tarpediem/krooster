@@ -431,8 +431,8 @@ export default function CalendarPage() {
     id: r.id,
     name: r.id === 1 ? 'A la mer by Kosmo' : 'Kosmo Sathorn',
     location: r.id === 1 ? 'Hua Hin' : 'Bangkok',
-    opening_time: '10:00',
-    closing_time: '23:00',
+    opening_hours: r.id === 1 ? '11:00' : '10:30',
+    closing_hours: r.id === 1 ? '23:00' : '00:30',
   }));
 
   const handleExportExcel = async () => {

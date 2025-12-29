@@ -1,0 +1,117 @@
+{
+  "name": "CRUD Restaurants",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/restaurants",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list",
+      "name": "Webhook List",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 100],
+      "webhookId": "restaurants-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/restaurants/update",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-update",
+      "name": "Webhook Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "restaurants-update"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM restaurants ORDER BY id;",
+        "options": {
+          "outputLargeData": true,
+          "nodeVersion": 2.4
+        }
+      },
+      "id": "postgres-list",
+      "name": "List Restaurants",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ (() => { const body = $json.body; const id = $json.query?.id || body?.id; if (!id) return 'SELECT 1 WHERE FALSE;'; const updates = []; if (body.name !== undefined) updates.push(\"name = '\" + body.name.replace(/'/g, \"''\") + \"'\"); if (body.location !== undefined) updates.push(\"location = '\" + body.location.replace(/'/g, \"''\") + \"'\"); if (body.address !== undefined) updates.push(\"address = \" + (body.address ? \"'\" + body.address.replace(/'/g, \"''\") + \"'\" : 'NULL')); if (body.opening_hours !== undefined) updates.push(\"opening_hours = '\" + body.opening_hours + \"'\"); if (body.closing_hours !== undefined) updates.push(\"closing_hours = '\" + body.closing_hours + \"'\"); if (body.closed_dates !== undefined) { if (Array.isArray(body.closed_dates) && body.closed_dates.length > 0) { updates.push(\"closed_dates = ARRAY['\" + body.closed_dates.join(\"','\") + \"']\"); } else { updates.push('closed_dates = NULL'); } } if (updates.length === 0) return 'SELECT * FROM restaurants WHERE id = ' + id + ';'; return 'UPDATE restaurants SET ' + updates.join(', ') + ' WHERE id = ' + id + ' RETURNING *;'; })() }}",
+        "options": {}
+      },
+      "id": "postgres-update",
+      "name": "Update Restaurant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json).filter(item => item.id !== undefined) } }}",
+        "options": {}
+      },
+      "id": "respond-list",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-update",
+      "name": "Respond Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 300]
+    }
+  ],
+  "connections": {
+    "Webhook List": {
+      "main": [[{"node": "List Restaurants", "type": "main", "index": 0}]]
+    },
+    "Webhook Update": {
+      "main": [[{"node": "Update Restaurant", "type": "main", "index": 0}]]
+    },
+    "List Restaurants": {
+      "main": [[{"node": "Respond List", "type": "main", "index": 0}]]
+    },
+    "Update Restaurant": {
+      "main": [[{"node": "Respond Update", "type": "main", "index": 0}]]
+    }
+  },
+  "active": true,
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [{"name": "restaurants"}, {"name": "crud"}],
+  "triggerCount": 2,
+  "versionId": "1"
+}

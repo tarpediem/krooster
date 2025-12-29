@@ -3,8 +3,10 @@ export interface Restaurant {
   id: number;
   name: string;
   location: string;
-  opening_time: string;
-  closing_time: string;
+  address?: string;
+  opening_hours: string;
+  closing_hours: string;
+  closed_dates?: string[];
 }
 
 // Employment types

@@ -70,10 +70,13 @@ import {
   exportLeavesCSV,
   getShiftRules,
   saveShiftRules,
+  getRestaurants,
+  updateRestaurant,
   type AdminStats,
   type LLMConfig,
   type ShiftRules,
 } from '@/lib/api';
+import type { Restaurant } from '@/lib/types';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
@@ -97,6 +100,9 @@ export default function SettingsPage() {
   const [shiftRules, setShiftRules] = useState<ShiftRules>({});
   const [editedRules, setEditedRules] = useState<Record<string, string>>({});
   const [isSavingRules, setIsSavingRules] = useState(false);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [editedRestaurants, setEditedRestaurants] = useState<Record<number, Partial<Restaurant>>>({});
+  const [isSavingRestaurants, setIsSavingRestaurants] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -128,20 +134,31 @@ export default function SettingsPage() {
   async function loadData() {
     setIsLoading(true);
     try {
-      const [statsData, configData, rulesData] = await Promise.all([
+      const [statsData, configData, rulesData, restaurantsData] = await Promise.all([
         getAdminStats().catch(() => ({ employee_count: 0, shift_count: 0, leave_count: 0 })),
         getLLMConfig().catch(() => ({ provider: 'ollama' as const, model: 'mistral', api_url: 'http://host.docker.internal:11434' })),
         getShiftRules().catch(() => ({})),
+        getRestaurants().catch(() => []),
       ]);
       setStats(statsData);
       setLlmConfig(configData);
       setShiftRules(rulesData);
+      setRestaurants(restaurantsData);
       // Initialize edited rules with current values
       const initialEdits: Record<string, string> = {};
       Object.entries(rulesData).forEach(([key, rule]) => {
         initialEdits[key] = rule.value;
       });
       setEditedRules(initialEdits);
+      // Initialize edited restaurants
+      const initialRestaurants: Record<number, Partial<Restaurant>> = {};
+      restaurantsData.forEach((r) => {
+        initialRestaurants[r.id] = {
+          opening_hours: r.opening_hours,
+          closing_hours: r.closing_hours,
+        };
+      });
+      setEditedRestaurants(initialRestaurants);
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -304,6 +321,31 @@ export default function SettingsPage() {
 
   function handleRuleChange(key: string, value: string) {
     setEditedRules(prev => ({ ...prev, [key]: value }));
+  }
+
+  function handleRestaurantChange(id: number, field: 'opening_hours' | 'closing_hours', value: string) {
+    setEditedRestaurants(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
+    }));
+  }
+
+  async function handleSaveRestaurants() {
+    setIsSavingRestaurants(true);
+    try {
+      // Save each restaurant that has changes
+      await Promise.all(
+        Object.entries(editedRestaurants).map(([id, data]) =>
+          updateRestaurant(Number(id), data)
+        )
+      );
+      toast.success('Restaurant hours saved successfully');
+      loadData(); // Reload to get updated data
+    } catch (error) {
+      toast.error('Failed to save restaurant hours');
+    } finally {
+      setIsSavingRestaurants(false);
+    }
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -586,6 +628,68 @@ export default function SettingsPage() {
                 Save Settings
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Restaurant Hours */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-blue-600" />
+              <CardTitle>Restaurant Hours</CardTitle>
+            </div>
+            <CardDescription>Configure opening and closing hours for each restaurant</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
+              {restaurants.map((restaurant) => (
+                <div key={restaurant.id} className="rounded-lg border p-4 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${restaurant.id === 1 ? 'bg-blue-500/10' : 'bg-green-500/10'}`}>
+                      <MapPin className={`h-5 w-5 ${restaurant.id === 1 ? 'text-blue-600' : 'text-green-600'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium">{restaurant.name}</p>
+                      <p className="text-sm text-muted-foreground">{restaurant.location}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor={`opening-${restaurant.id}`}>Opening Time</Label>
+                      <Input
+                        id={`opening-${restaurant.id}`}
+                        type="time"
+                        value={editedRestaurants[restaurant.id]?.opening_hours?.slice(0, 5) || restaurant.opening_hours?.slice(0, 5) || '10:00'}
+                        onChange={(e) => handleRestaurantChange(restaurant.id, 'opening_hours', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`closing-${restaurant.id}`}>Closing Time</Label>
+                      <Input
+                        id={`closing-${restaurant.id}`}
+                        type="time"
+                        value={editedRestaurants[restaurant.id]?.closing_hours?.slice(0, 5) || restaurant.closing_hours?.slice(0, 5) || '23:00'}
+                        onChange={(e) => handleRestaurantChange(restaurant.id, 'closing_hours', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {restaurant.closed_dates && restaurant.closed_dates.length > 0 && (
+                    <div className="text-sm text-muted-foreground">
+                      Closed on: {restaurant.closed_dates.join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <Button onClick={handleSaveRestaurants} disabled={isSavingRestaurants} className="w-full sm:w-auto">
+              {isSavingRestaurants ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              Save Restaurant Hours
+            </Button>
           </CardContent>
         </Card>
 

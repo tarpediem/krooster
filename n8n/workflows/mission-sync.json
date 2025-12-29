@@ -1,0 +1,62 @@
+{
+  "name": "Mission Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/missions/sync",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "mission-sync",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ (() => {\n  const body = $json.body;\n  const missionId = body.mission_id;\n  const employeeId = body.employee_id;\n  const originRestaurantId = body.origin_restaurant_id;\n  const startDate = body.start_date;\n  const endDate = body.end_date;\n  \n  // Cancel all shifts at origin restaurant during mission period\n  return `UPDATE shifts SET status = 'cancelled', notes = COALESCE(notes, '') || ' (cancelled: on mission)' WHERE employee_id = ${employeeId} AND restaurant_id = ${originRestaurantId} AND date >= '${startDate}' AND date <= '${endDate}' AND status != 'cancelled' RETURNING id, date, start_time, end_time;`;\n})() }}",
+        "options": {}
+      },
+      "id": "cancel-origin-shifts",
+      "name": "Cancel Origin Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 300],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "PostgreSQL Planning"}},
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const cancelled = $input.all().map(i => i.json).filter(s => s.id);\nreturn {\n  success: true,\n  shifts_cancelled: cancelled.length,\n  cancelled_shifts: cancelled\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {"main": [[{"node": "Cancel Origin Shifts", "type": "main", "index": 0}]]},
+    "Cancel Origin Shifts": {"main": [[{"node": "Format Response", "type": "main", "index": 0}]]},
+    "Format Response": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": true
+}

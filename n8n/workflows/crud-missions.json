@@ -1,0 +1,216 @@
+{
+  "name": "CRUD Missions",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/missions",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-create",
+      "name": "Webhook Create",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 100],
+      "webhookId": "missions-create"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/missions",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list",
+      "name": "Webhook List",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "missions-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/missions/update",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-update",
+      "name": "Webhook Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 500],
+      "webhookId": "missions-update"
+    },
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "api/missions/delete",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-delete",
+      "name": "Webhook Delete",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 700],
+      "webhookId": "missions-delete"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO missions (employee_id, origin_restaurant_id, destination_restaurant_id, start_date, end_date, accommodation_planned, notes)\nVALUES (\n  {{ $json.body.employee_id }},\n  {{ $json.body.origin_restaurant_id }},\n  {{ $json.body.destination_restaurant_id }},\n  '{{ $json.body.start_date }}',\n  '{{ $json.body.end_date }}',\n  {{ $json.body.accommodation_planned !== false }},\n  {{ $json.body.notes ? \"'\" + $json.body.notes.replace(/'/g, \"''\") + \"'\" : 'NULL' }}\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-create",
+      "name": "Create Mission",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ (() => {\n  const q = $json.query || {};\n  let sql = `SELECT m.*,\n    e.first_name as employee_first_name, e.last_name as employee_last_name,\n    r1.name as origin_restaurant_name, r2.name as destination_restaurant_name\n    FROM missions m\n    LEFT JOIN employees e ON m.employee_id = e.id\n    LEFT JOIN restaurants r1 ON m.origin_restaurant_id = r1.id\n    LEFT JOIN restaurants r2 ON m.destination_restaurant_id = r2.id\n    WHERE 1=1`;\n  \n  if (q.employee_id) sql += ` AND m.employee_id = ${q.employee_id}`;\n  if (q.status) sql += ` AND m.status = '${q.status}'`;\n  if (q.destination_restaurant_id) sql += ` AND m.destination_restaurant_id = ${q.destination_restaurant_id}`;\n  if (q.date_from) sql += ` AND m.start_date >= '${q.date_from}'`;\n  if (q.date_to) sql += ` AND m.end_date <= '${q.date_to}'`;\n  \n  sql += ' ORDER BY m.start_date DESC';\n  return sql;\n})() }}",
+        "options": {
+          "outputLargeData": true,
+          "nodeVersion": 2.4
+        }
+      },
+      "id": "postgres-list",
+      "name": "List Missions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ (() => {\n  const body = $json.body;\n  const id = $json.query?.id || body?.id;\n  if (!id) return 'SELECT 1 WHERE FALSE;';\n  \n  const updates = [];\n  if (body.status !== undefined) updates.push(`status = '${body.status}'`);\n  if (body.start_date !== undefined) updates.push(`start_date = '${body.start_date}'`);\n  if (body.end_date !== undefined) updates.push(`end_date = '${body.end_date}'`);\n  if (body.destination_restaurant_id !== undefined) updates.push(`destination_restaurant_id = ${body.destination_restaurant_id}`);\n  if (body.accommodation_planned !== undefined) updates.push(`accommodation_planned = ${body.accommodation_planned}`);\n  if (body.notes !== undefined) updates.push(`notes = ${body.notes ? \"'\" + body.notes.replace(/'/g, \"''\") + \"'\" : 'NULL'}`);\n  \n  if (updates.length === 0) return `SELECT * FROM missions WHERE id = ${id};`;\n  return `UPDATE missions SET ${updates.join(', ')} WHERE id = ${id} RETURNING *;`;\n})() }}",
+        "options": {}
+      },
+      "id": "postgres-update",
+      "name": "Update Mission",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM missions WHERE id = {{ $json.query.id }} RETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-delete",
+      "name": "Delete Mission",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 700],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-create",
+      "name": "Respond Create",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json).filter(item => item.id !== undefined) } }}",
+        "options": {}
+      },
+      "id": "respond-list",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-update",
+      "name": "Respond Update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Mission deleted', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-delete",
+      "name": "Respond Delete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 700]
+    }
+  ],
+  "connections": {
+    "Webhook Create": {
+      "main": [[{"node": "Create Mission", "type": "main", "index": 0}]]
+    },
+    "Webhook List": {
+      "main": [[{"node": "List Missions", "type": "main", "index": 0}]]
+    },
+    "Webhook Update": {
+      "main": [[{"node": "Update Mission", "type": "main", "index": 0}]]
+    },
+    "Webhook Delete": {
+      "main": [[{"node": "Delete Mission", "type": "main", "index": 0}]]
+    },
+    "Create Mission": {
+      "main": [[{"node": "Respond Create", "type": "main", "index": 0}]]
+    },
+    "List Missions": {
+      "main": [[{"node": "Respond List", "type": "main", "index": 0}]]
+    },
+    "Update Mission": {
+      "main": [[{"node": "Respond Update", "type": "main", "index": 0}]]
+    },
+    "Delete Mission": {
+      "main": [[{"node": "Respond Delete", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [{"name": "missions"}, {"name": "crud"}],
+  "triggerCount": 4,
+  "versionId": "1"
+}

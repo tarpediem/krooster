@@ -15,6 +15,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Lightbulb,
+  Plane,
+  ArrowLeftRight,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 const features = [
   {
     name: 'Schedule',
-    description: 'View and manage weekly shifts for both restaurants. Drag and drop to assign employees.',
+    description: 'View and manage weekly shifts for both restaurants. Export to Excel with colors.',
     href: '/calendar',
     icon: Calendar,
     color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
@@ -30,11 +33,19 @@ const features = [
   },
   {
     name: 'Employees',
-    description: 'Manage your team. Add new staff, set their skills, and mark who can work at both locations.',
+    description: 'Manage your team, set shift preferences (AM/PM), days off, and swap days between staff.',
     href: '/employees',
     icon: Users,
     color: 'bg-green-500/10 text-green-600 dark:text-green-400',
     buttonColor: 'bg-green-600 hover:bg-green-700',
+  },
+  {
+    name: 'Missions',
+    description: 'Send mobile employees to work at the other restaurant. Schedule adapts automatically.',
+    href: '/missions',
+    icon: Plane,
+    color: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+    buttonColor: 'bg-cyan-600 hover:bg-cyan-700',
   },
   {
     name: 'Leave Requests',
@@ -46,7 +57,7 @@ const features = [
   },
   {
     name: 'AI Assistant',
-    description: 'Ask questions about scheduling, get suggestions, or auto-generate optimal schedules.',
+    description: 'Ask Kruce about scheduling, get suggestions, or auto-generate optimal schedules.',
     href: '/assistant',
     icon: MessageSquare,
     color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
@@ -83,19 +94,24 @@ const steps = [
 
 const tips = [
   {
-    icon: UserCheck,
-    title: 'Mobile Employees',
-    description: 'Employees marked as "mobile" can be assigned to either Hua Hin or Sathorn. They get accommodation when working at the other site.',
+    icon: Sun,
+    title: 'Shift Preferences',
+    description: 'Set each employee\'s preferred shift (Morning or Afternoon). The scheduler respects these preferences.',
+  },
+  {
+    icon: ArrowLeftRight,
+    title: 'Swap Days Off',
+    description: 'Employees can swap their days off. Go to Employees and click "Swap Days Off" to exchange between two staff members.',
+  },
+  {
+    icon: Plane,
+    title: 'Missions',
+    description: 'Send mobile employees on missions to the other restaurant. Their shifts are automatically cancelled at origin and created at destination.',
   },
   {
     icon: Clock,
-    title: 'Shift Rules',
-    description: 'Max 8 hours per shift. Breaks are mandatory for shifts over 5 hours. At least 11 hours rest between shifts.',
-  },
-  {
-    icon: AlertCircle,
-    title: 'Minimum Staffing',
-    description: 'Each restaurant needs at least 3 employees per shift. The system will alert you if you are understaffed.',
+    title: 'Two Shifts System',
+    description: 'Hua Hin: 11:00-23:00 (closed Jan 1st). Sathorn: 10:30-00:30 (open every day). Morning and Afternoon shifts.',
   },
 ];
 
@@ -164,7 +180,7 @@ export default function WelcomePage() {
           <Sparkles className="h-5 w-5 text-primary" />
           <h2 className="text-2xl font-bold">Quick Start</h2>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {features.map((feature) => (
             <Card key={feature.name} className="group relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1">
               <CardHeader className="pb-2">
@@ -220,7 +236,7 @@ export default function WelcomePage() {
           <Lightbulb className="h-5 w-5 text-primary" />
           <h2 className="text-2xl font-bold">Important Tips</h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {tips.map((tip, index) => (
             <div
               key={index}

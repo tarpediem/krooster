@@ -3,6 +3,9 @@ import type {
   CreateEmployeeData,
   Shift,
   CreateShiftData,
+  Mission,
+  CreateMissionData,
+  MissionStatus,
   LeaveRequest,
   CreateLeaveData,
   LeaveBalance,
@@ -64,6 +67,18 @@ export async function deleteEmployee(id: number): Promise<void> {
   });
 }
 
+export async function swapDaysOff(
+  employee1: { id: number; days_off: number[] | null },
+  employee2: { id: number; days_off: number[] | null }
+): Promise<{ emp1: Employee; emp2: Employee }> {
+  // Swap days_off between two employees
+  const [emp1, emp2] = await Promise.all([
+    updateEmployee(employee1.id, { days_off: employee2.days_off }),
+    updateEmployee(employee2.id, { days_off: employee1.days_off }),
+  ]);
+  return { emp1, emp2 };
+}
+
 // ============ SHIFTS ============
 
 export interface GetShiftsParams {
@@ -109,6 +124,65 @@ export async function cancelShift(id: number): Promise<void> {
   await fetchAPI(`/api/shifts/delete?id=${id}`, {
     method: 'DELETE',
   });
+}
+
+// ============ MISSIONS ============
+
+export interface GetMissionsParams {
+  employee_id?: number;
+  status?: MissionStatus;
+  destination_restaurant_id?: number;
+  date_from?: string;
+  date_to?: string;
+}
+
+export async function getMissions(params: GetMissionsParams = {}): Promise<Mission[]> {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) {
+      searchParams.append(key, String(value));
+    }
+  });
+
+  const query = searchParams.toString();
+  const endpoint = query ? `/api/missions?${query}` : '/api/missions';
+
+  const result = await fetchAPI<APIResponse<Mission[]>>(endpoint);
+  return result.data || [];
+}
+
+export async function createMission(data: CreateMissionData): Promise<Mission> {
+  const result = await fetchAPI<APIResponse<Mission>>('/api/missions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return result.data!;
+}
+
+export async function updateMission(id: number, data: Partial<CreateMissionData & { status: MissionStatus }>): Promise<Mission> {
+  const result = await fetchAPI<APIResponse<Mission>>(`/api/missions/update?id=${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return result.data!;
+}
+
+export async function deleteMission(id: number): Promise<void> {
+  await fetchAPI(`/api/missions/delete?id=${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function acceptMission(id: number): Promise<Mission> {
+  return updateMission(id, { status: 'accepted' });
+}
+
+export async function refuseMission(id: number): Promise<Mission> {
+  return updateMission(id, { status: 'refused' });
+}
+
+export async function completeMission(id: number): Promise<Mission> {
+  return updateMission(id, { status: 'completed' });
 }
 
 // ============ LEAVE REQUESTS ============

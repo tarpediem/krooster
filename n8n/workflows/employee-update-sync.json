@@ -1,0 +1,162 @@
+{
+  "name": "Employee Update Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/employees/sync-schedule",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "employee-sync"
+    },
+    {
+      "parameters": {
+        "jsCode": "const emp = $json.body;\nconst empId = emp.id;\nconst daysOff = emp.days_off;\n\n// If no days off set, nothing to sync\nif (!daysOff || daysOff.length === 0) {\n  return { skip: true, message: 'No days off set' };\n}\n\n// Convert our days (0=Mon...6=Sun) to PostgreSQL DOW (0=Sun, 1=Mon...6=Sat)\nconst pgDays = daysOff.map(d => d === 6 ? 0 : d + 1);\n\nreturn {\n  skip: false,\n  employee_id: empId,\n  employee_name: emp.first_name || 'Unknown',\n  days_off: daysOff,\n  pg_dows: pgDays,\n  restaurant_id: emp.restaurant_id\n};"
+      },
+      "id": "prepare-sync",
+      "name": "Prepare Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [{"id": "check-skip", "leftValue": "={{ $json.skip }}", "rightValue": true, "operator": {"type": "boolean", "operation": "false"}}],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-skip",
+      "name": "Need Sync?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, employee_id, restaurant_id, date, start_time, end_time, position, notes FROM shifts WHERE employee_id = {{ $json.employee_id }} AND EXTRACT(DOW FROM date) = ANY(ARRAY[{{ $json.pg_dows.join(',') }}]) AND date >= CURRENT_DATE AND status != 'cancelled';",
+        "options": {}
+      },
+      "id": "get-conflicting-shifts",
+      "name": "Get Conflicting Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [960, 200],
+      "credentials": {
+        "postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const syncData = $('Prepare Sync').first().json;\nconst conflictingShifts = $input.all().map(i => i.json).filter(s => s.id);\n\nif (conflictingShifts.length === 0) {\n  return { reassignments: [], message: 'No conflicting shifts found' };\n}\n\n// Group shifts by date and restaurant\nconst reassignments = [];\nfor (const shift of conflictingShifts) {\n  reassignments.push({\n    original_shift_id: shift.id,\n    original_employee_id: shift.employee_id,\n    restaurant_id: shift.restaurant_id,\n    date: shift.date,\n    start_time: shift.start_time,\n    end_time: shift.end_time,\n    position: shift.position,\n    notes: shift.notes,\n    excluded_employee_id: syncData.employee_id\n  });\n}\n\nreturn { reassignments, syncData };"
+      },
+      "id": "prepare-reassignments",
+      "name": "Prepare Reassignments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.reassignments || data.reassignments.length === 0) {\n  return [];\n}\nreturn data.reassignments.map(r => ({ json: r }));"
+      },
+      "id": "split-reassignments",
+      "name": "Split Reassignments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH available_employee AS (\n  SELECT e.id, e.first_name\n  FROM employees e\n  WHERE e.active = true\n  AND e.restaurant_id = {{ $json.restaurant_id }}\n  AND e.id != {{ $json.excluded_employee_id }}\n  AND (e.days_off IS NULL OR NOT (CASE WHEN EXTRACT(DOW FROM '{{ $json.date }}'::date) = 0 THEN 6 ELSE EXTRACT(DOW FROM '{{ $json.date }}'::date)::int - 1 END) = ANY(e.days_off))\n  AND e.id NOT IN (\n    SELECT employee_id FROM shifts \n    WHERE date = '{{ $json.date }}' \n    AND employee_id IS NOT NULL\n    AND status != 'cancelled'\n  )\n  AND e.id NOT IN (\n    SELECT employee_id FROM absences\n    WHERE status = 'approved'\n    AND '{{ $json.date }}' BETWEEN start_date AND end_date\n  )\n  ORDER BY RANDOM()\n  LIMIT 1\n)\nUPDATE shifts \nSET employee_id = (SELECT id FROM available_employee),\n    notes = COALESCE(notes, '') || ' (reassigned)'\nWHERE id = {{ $json.original_shift_id }}\nAND EXISTS (SELECT 1 FROM available_employee)\nRETURNING id, employee_id, date, (SELECT first_name FROM employees WHERE id = shifts.employee_id) as new_employee;",
+        "options": {}
+      },
+      "id": "reassign-shift",
+      "name": "Reassign Shift",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1680, 200],
+      "credentials": {
+        "postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json).filter(r => r.id);\nconst syncData = $('Prepare Reassignments').first().json.syncData;\nconst originalCount = $('Prepare Reassignments').first().json.reassignments?.length || 0;\n\nconst reassigned = results.filter(r => r.new_employee);\nconst failed = originalCount - reassigned.length;\nconst dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];\n\nreturn {\n  success: true,\n  employee: syncData.employee_name,\n  days_off: syncData.days_off.map(d => dayNames[d]).join(', '),\n  shifts_found: originalCount,\n  shifts_reassigned: reassigned.length,\n  shifts_unassigned: failed,\n  reassignments: reassigned.map(r => ({ date: r.date, new_employee: r.new_employee })),\n  message: failed > 0 \n    ? `Warning: ${failed} shifts could not be reassigned (no available employee)`\n    : `Successfully reassigned ${reassigned.length} shifts`\n};"
+      },
+      "id": "format-result",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2160, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: $json.message, skipped: true } }}",
+        "options": {}
+      },
+      "id": "respond-skipped",
+      "name": "Respond Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Prepare Sync", "type": "main", "index": 0}]]
+    },
+    "Prepare Sync": {
+      "main": [[{"node": "Need Sync?", "type": "main", "index": 0}]]
+    },
+    "Need Sync?": {
+      "main": [
+        [{"node": "Get Conflicting Shifts", "type": "main", "index": 0}],
+        [{"node": "Respond Skipped", "type": "main", "index": 0}]
+      ]
+    },
+    "Get Conflicting Shifts": {
+      "main": [[{"node": "Prepare Reassignments", "type": "main", "index": 0}]]
+    },
+    "Prepare Reassignments": {
+      "main": [[{"node": "Split Reassignments", "type": "main", "index": 0}]]
+    },
+    "Split Reassignments": {
+      "main": [[{"node": "Reassign Shift", "type": "main", "index": 0}]]
+    },
+    "Reassign Shift": {
+      "main": [[{"node": "Format Result", "type": "main", "index": 0}]]
+    },
+    "Format Result": {
+      "main": [[{"node": "Respond Success", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "triggerCount": 1,
+  "active": true
+}

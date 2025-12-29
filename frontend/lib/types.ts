@@ -9,6 +9,7 @@ export interface Restaurant {
 
 // Employment types
 export type EmploymentType = 'full_time' | 'part_time' | 'extra';
+export type ShiftPreference = 'morning' | 'afternoon' | 'flexible';
 
 // Day of week (0=Monday, 6=Sunday)
 export const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
@@ -26,7 +27,8 @@ export interface Employee {
   positions: string[];
   active: boolean;
   hire_date?: string;
-  fixed_day_off?: number | null; // 0-6 (Mon-Sun)
+  days_off?: number[] | null; // Array of 0-6 (Mon-Sun), e.g. [0, 3] for Mon & Thu
+  preferred_shift?: ShiftPreference;
   employment_type: EmploymentType;
   max_hours_per_week?: number | null;
   created_at?: string;
@@ -42,10 +44,24 @@ export interface CreateEmployeeData {
   positions?: string[];
   hire_date?: string;
   active?: boolean;
-  fixed_day_off?: number | null;
+  days_off?: number[] | null;
+  preferred_shift?: ShiftPreference;
   employment_type?: EmploymentType;
   max_hours_per_week?: number | null;
 }
+
+// Shift preference labels
+export const SHIFT_PREFERENCE_LABELS: Record<ShiftPreference, string> = {
+  morning: 'Morning',
+  afternoon: 'Afternoon',
+  flexible: 'Flexible',
+};
+
+export const SHIFT_PREFERENCE_ICONS: Record<ShiftPreference, string> = {
+  morning: '☀️',
+  afternoon: '🌙',
+  flexible: '🔄',
+};
 
 // Employment type labels
 export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
@@ -91,6 +107,50 @@ export interface CreateShiftData {
   is_mission?: boolean;
   notes?: string;
 }
+
+// Mission types (mobile employees working at other restaurant)
+export type MissionStatus = 'proposed' | 'accepted' | 'refused' | 'completed';
+
+export interface Mission {
+  id: number;
+  employee_id: number;
+  employee_first_name?: string;
+  employee_last_name?: string;
+  origin_restaurant_id: number;
+  origin_restaurant_name?: string;
+  destination_restaurant_id: number;
+  destination_restaurant_name?: string;
+  start_date: string;
+  end_date: string;
+  status: MissionStatus;
+  accommodation_planned: boolean;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface CreateMissionData {
+  employee_id: number;
+  origin_restaurant_id: number;
+  destination_restaurant_id: number;
+  start_date: string;
+  end_date: string;
+  accommodation_planned?: boolean;
+  notes?: string;
+}
+
+export const MISSION_STATUS_LABELS: Record<MissionStatus, string> = {
+  proposed: 'Proposed',
+  accepted: 'Accepted',
+  refused: 'Refused',
+  completed: 'Completed',
+};
+
+export const MISSION_STATUS_COLORS: Record<MissionStatus, string> = {
+  proposed: 'bg-yellow-500',
+  accepted: 'bg-green-500',
+  refused: 'bg-red-500',
+  completed: 'bg-blue-500',
+};
 
 // Leave/Absence types
 export interface LeaveRequest {

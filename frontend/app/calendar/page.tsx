@@ -26,6 +26,8 @@ import {
   LayoutGrid,
   List,
   CalendarDays,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   format,
@@ -47,6 +49,7 @@ import {
 import { toast } from 'sonner';
 import type { Shift, CreateShiftData } from '@/lib/types';
 import { POSITION_COLORS } from '@/lib/types';
+import { exportScheduleToExcel } from '@/lib/excel-export';
 
 const RESTAURANTS = [
   { id: 1, name: 'Hua Hin', color: 'bg-blue-500' },
@@ -421,6 +424,41 @@ export default function CalendarPage() {
   const { data: employees } = useEmployees();
   const createShift = useCreateShift();
   const cancelShift = useCancelShift();
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Convert local RESTAURANTS to expected format
+  const restaurantsForExport = RESTAURANTS.map(r => ({
+    id: r.id,
+    name: r.id === 1 ? 'A la mer by Kosmo' : 'Kosmo Sathorn',
+    location: r.id === 1 ? 'Hua Hin' : 'Bangkok',
+    opening_time: '10:00',
+    closing_time: '23:00',
+  }));
+
+  const handleExportExcel = async () => {
+    if (!shifts || !employees) {
+      toast.error('Data not loaded yet');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      await exportScheduleToExcel({
+        shifts,
+        restaurants: restaurantsForExport,
+        employees,
+        dateFrom: dateRange.start,
+        dateTo: dateRange.end,
+        viewMode: viewMode === 'day' ? 'week' : viewMode,
+      });
+      toast.success('Schedule exported successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export schedule');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const navigate = (direction: 'prev' | 'next') => {
     const modifier = direction === 'next' ? 1 : -1;
@@ -582,6 +620,21 @@ export default function CalendarPage() {
             isLoading={generateSchedule.isPending}
             defaultStartDate={currentDate}
           />
+
+          {/* Export Excel */}
+          <Button
+            variant="outline"
+            onClick={handleExportExcel}
+            disabled={isExporting || !shifts?.length}
+            className="gap-2"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            Export Excel
+          </Button>
         </div>
       </div>
 

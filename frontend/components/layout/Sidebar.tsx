@@ -14,6 +14,7 @@ import {
   Home,
   Settings,
   BarChart3,
+  Plane,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Schedule', href: '/calendar', icon: Calendar },
   { name: 'Employees', href: '/employees', icon: Users },
+  { name: 'Missions', href: '/missions', icon: Plane },
   { name: 'Leave', href: '/leave', icon: CalendarOff },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Kruce', href: '/assistant', icon: MessageSquare },

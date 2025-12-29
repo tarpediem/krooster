@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from '@/hooks/useEmployees';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,13 +10,15 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet, ArrowLeftRight } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Employee, CreateEmployeeData, EmploymentType } from '@/lib/types';
-import { DAYS_OF_WEEK, EMPLOYMENT_TYPE_LABELS, EMPLOYMENT_TYPE_COLORS } from '@/lib/types';
+import type { Employee, CreateEmployeeData, EmploymentType, ShiftPreference } from '@/lib/types';
+import { swapDaysOff } from '@/lib/api';
+import { DAYS_OF_WEEK, EMPLOYMENT_TYPE_LABELS, EMPLOYMENT_TYPE_COLORS, SHIFT_PREFERENCE_LABELS, SHIFT_PREFERENCE_ICONS } from '@/lib/types';
 
 const POSITIONS = ['kitchen', 'service', 'bar', 'steward', 'cashier', 'runner', 'security', 'manager'];
 const EMPLOYMENT_TYPES: EmploymentType[] = ['full_time', 'part_time', 'extra'];
+const SHIFT_PREFERENCES: ShiftPreference[] = ['morning', 'afternoon', 'flexible'];
 const RESTAURANTS = [
   { id: 1, name: 'Hua Hin' },
   { id: 2, name: 'Sathorn' },
@@ -26,18 +29,19 @@ const RESTAURANTS = [
 // is_mobile: true/false (can work at both locations)
 // positions: kitchen, service, bar, steward, cashier, runner, security, manager (comma-separated in quotes)
 // employment_type: full_time, part_time, extra
-// fixed_day_off: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday (or leave empty)
+// days_off: Monday, Tuesday, etc. (comma-separated for multiple days, e.g. "Monday,Thursday")
 // max_hours_per_week: number (mainly for part_time, leave empty for full_time)
-const CSV_TEMPLATE = `first_name,last_name,phone,email,restaurant,is_mobile,positions,employment_type,fixed_day_off,max_hours_per_week
+const CSV_TEMPLATE = `first_name,last_name,phone,email,restaurant,is_mobile,positions,employment_type,days_off,max_hours_per_week
 # FULL-TIME EXAMPLES (regular staff)
 Som,Chai,081-111-1111,som@kosmo.com,Hua Hin,false,"kitchen,service",full_time,,
 Narin,Kaew,081-222-2222,narin@kosmo.com,Hua Hin,true,"service,bar,cashier",full_time,Sunday,
 Pim,Siri,081-333-3333,pim@kosmo.com,Sathorn,false,manager,full_time,Monday,
+# EMPLOYEES WITH 2 DAYS OFF (work more hours other days)
+Lek,Student,082-444-4444,lek@email.com,Hua Hin,false,service,full_time,"Monday,Thursday",
+Fah,Helper,082-555-5555,fah@email.com,Sathorn,false,"runner,steward",full_time,"Saturday,Sunday",
 # PART-TIME EXAMPLES (limited hours per week)
-Lek,Student,082-444-4444,lek@email.com,Hua Hin,false,service,part_time,Wednesday,20
-Fah,Helper,082-555-5555,fah@email.com,Sathorn,false,"runner,steward",part_time,Saturday,24
+Ton,Part,083-666-6666,ton@email.com,Hua Hin,false,service,part_time,Wednesday,20
 # EXTRA EXAMPLES (on-call staff)
-Ton,Extra,083-666-6666,ton@email.com,Hua Hin,false,service,extra,,
 Dao,OnCall,083-777-7777,dao@email.com,Sathorn,true,"kitchen,steward",extra,,`;
 
 function parseCSV(text: string): CreateEmployeeData[] {
@@ -94,14 +98,23 @@ function parseCSV(text: string): CreateEmployeeData[] {
     const validEmpTypes = ['full_time', 'part_time', 'extra'];
     const employment_type = validEmpTypes.includes(empType) ? empType as EmploymentType : 'full_time';
 
-    // Parse fixed day off (Monday=0, Sunday=6)
+    // Parse days off (Monday=0, Sunday=6) - supports multiple days and fixed_day_off column
     const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    const dayOffStr = row.fixed_day_off?.toLowerCase() || '';
-    let fixed_day_off: number | null = null;
-    if (dayOffStr) {
-      const dayIndex = dayNames.findIndex(d => d.startsWith(dayOffStr.substring(0, 3)));
-      if (dayIndex !== -1) fixed_day_off = dayIndex;
+    const daysOffStr = (row.days_off || row.fixed_day_off || '').toLowerCase();
+    let days_off: number[] | null = null;
+    if (daysOffStr) {
+      const dayStrings = daysOffStr.split(',').map(d => d.trim());
+      const parsedDays = dayStrings
+        .map(dayStr => dayNames.findIndex(d => d.startsWith(dayStr.substring(0, 3))))
+        .filter(idx => idx !== -1);
+      if (parsedDays.length > 0) days_off = parsedDays;
     }
+
+    // Parse preferred shift (supports AM/PM and morning/afternoon/flexible)
+    const shiftStr = (row.preferred_shift || row.prefered_shift || '').toLowerCase();
+    let preferred_shift: ShiftPreference = 'flexible';
+    if (shiftStr === 'am' || shiftStr === 'morning') preferred_shift = 'morning';
+    else if (shiftStr === 'pm' || shiftStr === 'afternoon') preferred_shift = 'afternoon';
 
     // Parse max hours per week
     const maxHours = parseInt(row.max_hours_per_week || '', 10);
@@ -116,7 +129,8 @@ function parseCSV(text: string): CreateEmployeeData[] {
       is_mobile: row.is_mobile?.toLowerCase() === 'true' || row.is_mobile === '1',
       positions: positions.length > 0 ? positions : ['service'],
       employment_type,
-      fixed_day_off,
+      preferred_shift,
+      days_off,
       max_hours_per_week,
     });
   }
@@ -278,6 +292,161 @@ function ImportCSVDialog({
   );
 }
 
+function SwapDaysOffDialog({
+  employees,
+  onSwapComplete,
+}: {
+  employees: Employee[];
+  onSwapComplete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [employee1Id, setEmployee1Id] = useState<number | null>(null);
+  const [employee2Id, setEmployee2Id] = useState<number | null>(null);
+  const [isSwapping, setIsSwapping] = useState(false);
+
+  const employee1 = employees.find(e => e.id === employee1Id);
+  const employee2 = employees.find(e => e.id === employee2Id);
+
+  const formatDays = (days: number[] | null | undefined) => {
+    if (!days || days.length === 0) return 'None';
+    return days.map(d => DAYS_OF_WEEK[d]).join(', ');
+  };
+
+  const handleSwap = async () => {
+    if (!employee1 || !employee2) return;
+
+    setIsSwapping(true);
+    try {
+      await swapDaysOff(
+        { id: employee1.id, days_off: employee1.days_off ?? null },
+        { id: employee2.id, days_off: employee2.days_off ?? null }
+      );
+      toast.success(`Swapped days off between ${employee1.first_name} and ${employee2.first_name}`);
+      setOpen(false);
+      setEmployee1Id(null);
+      setEmployee2Id(null);
+      onSwapComplete();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to swap days off');
+    } finally {
+      setIsSwapping(false);
+    }
+  };
+
+  // Filter out employees without days off for selection
+  const employeesWithDaysOff = employees.filter(e => e.days_off && e.days_off.length > 0);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <ArrowLeftRight className="mr-2 h-4 w-4" />
+          Swap Days Off
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowLeftRight className="h-5 w-5" />
+            Swap Days Off Between Employees
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Select two employees to swap their days off. The schedule will automatically adapt.
+          </p>
+
+          {employeesWithDaysOff.length < 2 ? (
+            <div className="p-4 bg-muted rounded-lg text-center text-muted-foreground">
+              Need at least 2 employees with days off to swap.
+            </div>
+          ) : (
+            <>
+              {/* Employee 1 Selection */}
+              <div>
+                <Label htmlFor="emp1">First Employee</Label>
+                <select
+                  id="emp1"
+                  value={employee1Id ?? ''}
+                  onChange={(e) => setEmployee1Id(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background mt-1"
+                >
+                  <option value="">Select employee...</option>
+                  {employeesWithDaysOff
+                    .filter(e => e.id !== employee2Id)
+                    .map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.first_name} {e.last_name} - Off: {formatDays(e.days_off)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Employee 2 Selection */}
+              <div>
+                <Label htmlFor="emp2">Second Employee</Label>
+                <select
+                  id="emp2"
+                  value={employee2Id ?? ''}
+                  onChange={(e) => setEmployee2Id(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background mt-1"
+                >
+                  <option value="">Select employee...</option>
+                  {employeesWithDaysOff
+                    .filter(e => e.id !== employee1Id)
+                    .map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.first_name} {e.last_name} - Off: {formatDays(e.days_off)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Preview */}
+              {employee1 && employee2 && (
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <p className="font-medium text-sm">Preview:</p>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className="flex-1">
+                      <span className="font-medium">{employee1.first_name}</span>
+                      <div className="text-muted-foreground">
+                        {formatDays(employee1.days_off)} → {formatDays(employee2.days_off)}
+                      </div>
+                    </div>
+                    <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1 text-right">
+                      <span className="font-medium">{employee2.first_name}</span>
+                      <div className="text-muted-foreground">
+                        {formatDays(employee2.days_off)} → {formatDays(employee1.days_off)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  onClick={handleSwap}
+                  disabled={!employee1 || !employee2 || isSwapping}
+                  className="flex-1"
+                >
+                  {isSwapping && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Swap Days Off
+                </Button>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EmployeeCard({
   employee,
   onEdit,
@@ -322,9 +491,14 @@ function EmployeeCard({
                 {employee.phone}
               </div>
             )}
-            {employee.fixed_day_off !== null && employee.fixed_day_off !== undefined && (
+            {employee.days_off && employee.days_off.length > 0 && (
               <div className="mt-1 text-sm text-muted-foreground">
-                Off: <span className="font-medium">{DAYS_OF_WEEK[employee.fixed_day_off]}</span>
+                Off: <span className="font-medium">{employee.days_off.map(d => DAYS_OF_WEEK[d]).join(', ')}</span>
+              </div>
+            )}
+            {employee.preferred_shift && employee.preferred_shift !== 'flexible' && (
+              <div className="mt-1 text-sm text-muted-foreground">
+                Shift: <span className="font-medium">{SHIFT_PREFERENCE_ICONS[employee.preferred_shift]} {SHIFT_PREFERENCE_LABELS[employee.preferred_shift]}</span>
               </div>
             )}
             {employee.employment_type === 'part_time' && employee.max_hours_per_week && (
@@ -366,7 +540,8 @@ function EmployeeForm({
     is_mobile: employee?.is_mobile || false,
     positions: employee?.positions || [],
     employment_type: employee?.employment_type || 'full_time',
-    fixed_day_off: employee?.fixed_day_off ?? null,
+    preferred_shift: employee?.preferred_shift || 'flexible',
+    days_off: employee?.days_off ?? null,
     max_hours_per_week: employee?.max_hours_per_week ?? null,
   });
 
@@ -397,12 +572,11 @@ function EmployeeForm({
           />
         </div>
         <div>
-          <Label htmlFor="last_name">Last Name</Label>
+          <Label htmlFor="last_name">Last Name (optional)</Label>
           <Input
             id="last_name"
             value={formData.last_name}
             onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-            required
           />
         </div>
       </div>
@@ -456,36 +630,74 @@ function EmployeeForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="fixed_day_off">Fixed Day Off</Label>
-          <select
-            id="fixed_day_off"
-            value={formData.fixed_day_off ?? ''}
-            onChange={(e) => setFormData({ ...formData, fixed_day_off: e.target.value === '' ? null : Number(e.target.value) })}
-            className="w-full h-10 px-3 rounded-md border border-input bg-background"
-          >
-            <option value="">No fixed day off</option>
-            {DAYS_OF_WEEK.map((day, index) => (
-              <option key={index} value={index}>{day}</option>
-            ))}
-          </select>
+      <div>
+        <Label>Preferred Shift</Label>
+        <div className="flex gap-2 mt-2">
+          {SHIFT_PREFERENCES.map((pref) => (
+            <button
+              key={pref}
+              type="button"
+              onClick={() => setFormData({ ...formData, preferred_shift: pref })}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                formData.preferred_shift === pref
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted hover:bg-muted/80'
+              }`}
+            >
+              {SHIFT_PREFERENCE_ICONS[pref]} {SHIFT_PREFERENCE_LABELS[pref]}
+            </button>
+          ))}
         </div>
-        {formData.employment_type === 'part_time' && (
-          <div>
-            <Label htmlFor="max_hours">Max Hours/Week</Label>
-            <Input
-              id="max_hours"
-              type="number"
-              min="1"
-              max="40"
-              value={formData.max_hours_per_week || ''}
-              onChange={(e) => setFormData({ ...formData, max_hours_per_week: e.target.value ? Number(e.target.value) : null })}
-              placeholder="e.g., 20"
-            />
-          </div>
-        )}
       </div>
+
+      <div>
+        <Label>Days Off (select 1 or 2)</Label>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {DAYS_OF_WEEK.map((day, index) => {
+            const isSelected = formData.days_off?.includes(index) ?? false;
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={() => {
+                  const current = formData.days_off || [];
+                  if (isSelected) {
+                    const newDays = current.filter(d => d !== index);
+                    setFormData({ ...formData, days_off: newDays.length > 0 ? newDays : null });
+                  } else if (current.length < 2) {
+                    setFormData({ ...formData, days_off: [...current, index] });
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                }`}
+              >
+                {day.substring(0, 3)}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {formData.days_off?.length === 2 ? '2 days off - employee works more hours on other days' : 'Click to select days off'}
+        </p>
+      </div>
+
+      {formData.employment_type === 'part_time' && (
+        <div>
+          <Label htmlFor="max_hours">Max Hours/Week</Label>
+          <Input
+            id="max_hours"
+            type="number"
+            min="1"
+            max="40"
+            value={formData.max_hours_per_week || ''}
+            onChange={(e) => setFormData({ ...formData, max_hours_per_week: e.target.value ? Number(e.target.value) : null })}
+            placeholder="e.g., 20"
+          />
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <input
@@ -528,10 +740,15 @@ function EmployeeForm({
 }
 
 export default function EmployeesPage() {
+  const queryClient = useQueryClient();
   const { data: employees, isLoading, error } = useEmployees();
   const createMutation = useCreateEmployee();
   const updateMutation = useUpdateEmployee();
   const deleteMutation = useDeleteEmployee();
+
+  const handleSwapComplete = () => {
+    queryClient.invalidateQueries({ queryKey: ['employees'] });
+  };
 
   const [search, setSearch] = useState('');
   const [filterRestaurant, setFilterRestaurant] = useState<number | null>(null);
@@ -622,8 +839,11 @@ export default function EmployeesPage() {
             {employees?.length || 0} staff members
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <ImportCSVDialog onImport={handleImportCSV} isLoading={importing} />
+          {employees && employees.length > 0 && (
+            <SwapDaysOffDialog employees={employees} onSwapComplete={handleSwapComplete} />
+          )}
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
             if (!open) setSelectedEmployee(null);

@@ -1,0 +1,155 @@
+{
+  "name": "Swap Days Off",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "swap-days-off",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "swap-days-off"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, first_name, days_off, restaurant_id FROM employees WHERE id IN ({{ $json.body.employee1_id }}, {{ $json.body.employee2_id }});",
+        "options": {}
+      },
+      "id": "get-employees",
+      "name": "Get Employees",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const employees = $input.all().map(i => i.json);\nconst body = $('Webhook').first().json.body;\n\nif (employees.length !== 2) {\n  return { error: 'Both employees must exist', success: false };\n}\n\nconst emp1 = employees.find(e => e.id === body.employee1_id);\nconst emp2 = employees.find(e => e.id === body.employee2_id);\n\nif (!emp1 || !emp2) {\n  return { error: 'Employee not found', success: false };\n}\n\n// Swap the days_off\nreturn {\n  success: true,\n  emp1: { id: emp1.id, name: emp1.first_name, old_days: emp1.days_off, new_days: emp2.days_off, restaurant_id: emp1.restaurant_id },\n  emp2: { id: emp2.id, name: emp2.first_name, old_days: emp2.days_off, new_days: emp1.days_off, restaurant_id: emp2.restaurant_id }\n};"
+      },
+      "id": "prepare-swap",
+      "name": "Prepare Swap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [{"id": "check", "leftValue": "={{ $json.success }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true"}}],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE employees SET days_off = {{ $json.emp1.new_days ? 'ARRAY[' + $json.emp1.new_days.join(',') + ']::INTEGER[]' : 'NULL' }} WHERE id = {{ $json.emp1.id }};\nUPDATE employees SET days_off = {{ $json.emp2.new_days ? 'ARRAY[' + $json.emp2.new_days.join(',') + ']::INTEGER[]' : 'NULL' }} WHERE id = {{ $json.emp2.id }};\nSELECT 'done' as status;",
+        "options": {}
+      },
+      "id": "swap-days",
+      "name": "Swap Days Off",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1200, 200],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}}
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH conflicts AS (\n  SELECT s.id, s.employee_id, s.date, s.restaurant_id, s.start_time, s.end_time,\n    CASE WHEN EXTRACT(DOW FROM s.date) = 0 THEN 6 ELSE EXTRACT(DOW FROM s.date)::int - 1 END as day_of_week\n  FROM shifts s\n  JOIN employees e ON s.employee_id = e.id\n  WHERE s.date >= CURRENT_DATE\n  AND s.status != 'cancelled'\n  AND s.employee_id IN ({{ $('Prepare Swap').first().json.emp1.id }}, {{ $('Prepare Swap').first().json.emp2.id }})\n  AND CASE WHEN EXTRACT(DOW FROM s.date) = 0 THEN 6 ELSE EXTRACT(DOW FROM s.date)::int - 1 END = ANY(e.days_off)\n)\nSELECT * FROM conflicts;",
+        "options": {}
+      },
+      "id": "find-conflicts",
+      "name": "Find Conflicts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1440, 200],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}},
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const swapData = $('Prepare Swap').first().json;\nconst conflicts = $input.all().map(i => i.json).filter(c => c.id);\n\nif (conflicts.length === 0) {\n  return { reassignments: [], swapData };\n}\n\n// For each conflict, we'll swap the employee\nconst reassignments = conflicts.map(c => {\n  // If it's emp1's shift on their new day off, give it to emp2\n  // If it's emp2's shift on their new day off, give it to emp1\n  const newEmployeeId = c.employee_id === swapData.emp1.id ? swapData.emp2.id : swapData.emp1.id;\n  return {\n    shift_id: c.id,\n    old_employee_id: c.employee_id,\n    new_employee_id: newEmployeeId,\n    date: c.date\n  };\n});\n\nreturn reassignments.map(r => ({ json: r }));"
+      },
+      "id": "prepare-reassign",
+      "name": "Prepare Reassign",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE shifts SET employee_id = {{ $json.new_employee_id }}, notes = COALESCE(notes, '') || ' (swapped)' WHERE id = {{ $json.shift_id }} RETURNING id, employee_id, date;",
+        "options": {}
+      },
+      "id": "reassign-shifts",
+      "name": "Reassign Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1920, 200],
+      "credentials": {"postgres": {"id": "GvtIl9xYacgDPoso", "name": "Planning PostgreSQL"}},
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const swapData = $('Prepare Swap').first().json;\nconst reassigned = $('Reassign Shifts').all().map(i => i.json).filter(r => r.id);\nconst dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];\n\nconst formatDays = (days) => days ? days.map(d => dayNames[d]).join(', ') : 'None';\n\nreturn {\n  success: true,\n  message: `Swapped days off between ${swapData.emp1.name} and ${swapData.emp2.name}`,\n  swap: {\n    [swapData.emp1.name]: { from: formatDays(swapData.emp1.old_days), to: formatDays(swapData.emp1.new_days) },\n    [swapData.emp2.name]: { from: formatDays(swapData.emp2.old_days), to: formatDays(swapData.emp2.new_days) }\n  },\n  shifts_reassigned: reassigned.length\n};"
+      },
+      "id": "format-result",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2400, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {"responseCode": 400}
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Get Employees", "type": "main", "index": 0}]]},
+    "Get Employees": {"main": [[{"node": "Prepare Swap", "type": "main", "index": 0}]]},
+    "Prepare Swap": {"main": [[{"node": "Valid?", "type": "main", "index": 0}]]},
+    "Valid?": {"main": [[{"node": "Swap Days Off", "type": "main", "index": 0}], [{"node": "Respond Error", "type": "main", "index": 0}]]},
+    "Swap Days Off": {"main": [[{"node": "Find Conflicts", "type": "main", "index": 0}]]},
+    "Find Conflicts": {"main": [[{"node": "Prepare Reassign", "type": "main", "index": 0}]]},
+    "Prepare Reassign": {"main": [[{"node": "Reassign Shifts", "type": "main", "index": 0}]]},
+    "Reassign Shifts": {"main": [[{"node": "Format Result", "type": "main", "index": 0}]]},
+    "Format Result": {"main": [[{"node": "Respond Success", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": true
+}

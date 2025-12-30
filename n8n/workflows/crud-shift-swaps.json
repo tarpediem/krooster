@@ -1,0 +1,272 @@
+{
+  "name": "CRUD Shift Swaps",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/shift-swaps",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-create",
+      "name": "Webhook Create",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 100],
+      "webhookId": "shift-swaps-create"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/shift-swaps",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-list",
+      "name": "Webhook List",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "shift-swaps-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/shift-swaps/approve",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-approve",
+      "name": "Webhook Approve",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 500],
+      "webhookId": "shift-swaps-approve"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "api/shift-swaps/reject",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-reject",
+      "name": "Webhook Reject",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 700],
+      "webhookId": "shift-swaps-reject"
+    },
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "api/shift-swaps/cancel",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-cancel",
+      "name": "Webhook Cancel",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 900],
+      "webhookId": "shift-swaps-cancel"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO shift_swap_requests (requester_shift_id, target_shift_id, requester_employee_id, target_employee_id, reason)\nVALUES (\n  {{ $json.body.requester_shift_id }},\n  {{ $json.body.target_shift_id }},\n  {{ $json.body.requester_employee_id }},\n  {{ $json.body.target_employee_id }},\n  {{ $json.body.reason ? \"'\" + $json.body.reason + \"'\" : 'NULL' }}\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-create",
+      "name": "Create Swap Request",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 100],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ssr.*,\n  re.first_name || ' ' || re.last_name as requester_employee_name,\n  te.first_name || ' ' || te.last_name as target_employee_name,\n  rs.date as requester_shift_date,\n  rs.start_time || '-' || rs.end_time as requester_shift_time,\n  ts.date as target_shift_date,\n  ts.start_time || '-' || ts.end_time as target_shift_time\nFROM shift_swap_requests ssr\nLEFT JOIN employees re ON ssr.requester_employee_id = re.id\nLEFT JOIN employees te ON ssr.target_employee_id = te.id\nLEFT JOIN shifts rs ON ssr.requester_shift_id = rs.id\nLEFT JOIN shifts ts ON ssr.target_shift_id = ts.id\nORDER BY ssr.created_at DESC;",
+        "options": {
+          "outputLargeData": true,
+          "nodeVersion": 2.4
+        }
+      },
+      "id": "postgres-list",
+      "name": "List Swap Requests",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH swap_data AS (\n  SELECT requester_shift_id, target_shift_id, requester_employee_id, target_employee_id\n  FROM shift_swap_requests WHERE id = {{ $json.body.id }}\n),\nupdate_requester AS (\n  UPDATE shifts SET employee_id = (SELECT target_employee_id FROM swap_data)\n  WHERE id = (SELECT requester_shift_id FROM swap_data)\n),\nupdate_target AS (\n  UPDATE shifts SET employee_id = (SELECT requester_employee_id FROM swap_data)\n  WHERE id = (SELECT target_shift_id FROM swap_data)\n)\nUPDATE shift_swap_requests\nSET status = 'approved', approved_by = '{{ $json.body.approved_by || 'Manager' }}', approval_date = NOW()\nWHERE id = {{ $json.body.id }}\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-approve",
+      "name": "Approve and Swap Shifts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 500],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE shift_swap_requests\nSET status = 'rejected', approved_by = '{{ $json.body.approved_by || 'Manager' }}', approval_date = NOW()\nWHERE id = {{ $json.body.id }}\nRETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-reject",
+      "name": "Reject Request",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 700],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE shift_swap_requests SET status = 'cancelled' WHERE id = {{ $json.query.id }} RETURNING *;",
+        "options": {}
+      },
+      "id": "postgres-cancel",
+      "name": "Cancel Request",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [500, 900],
+      "credentials": {
+        "postgres": {
+          "id": "GvtIl9xYacgDPoso",
+          "name": "PostgreSQL Planning"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-create",
+      "name": "Respond Create",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $input.all().map(item => item.json).filter(item => item.id !== undefined) } }}",
+        "options": {}
+      },
+      "id": "respond-list",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Shift swap approved and shifts exchanged', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-approve",
+      "name": "Respond Approve",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Shift swap rejected', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-reject",
+      "name": "Respond Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Shift swap cancelled', data: $json } }}",
+        "options": {}
+      },
+      "id": "respond-cancel",
+      "name": "Respond Cancel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 900]
+    }
+  ],
+  "connections": {
+    "Webhook Create": {
+      "main": [[{ "node": "Create Swap Request", "type": "main", "index": 0 }]]
+    },
+    "Webhook List": {
+      "main": [[{ "node": "List Swap Requests", "type": "main", "index": 0 }]]
+    },
+    "Webhook Approve": {
+      "main": [[{ "node": "Approve and Swap Shifts", "type": "main", "index": 0 }]]
+    },
+    "Webhook Reject": {
+      "main": [[{ "node": "Reject Request", "type": "main", "index": 0 }]]
+    },
+    "Webhook Cancel": {
+      "main": [[{ "node": "Cancel Request", "type": "main", "index": 0 }]]
+    },
+    "Create Swap Request": {
+      "main": [[{ "node": "Respond Create", "type": "main", "index": 0 }]]
+    },
+    "List Swap Requests": {
+      "main": [[{ "node": "Respond List", "type": "main", "index": 0 }]]
+    },
+    "Approve and Swap Shifts": {
+      "main": [[{ "node": "Respond Approve", "type": "main", "index": 0 }]]
+    },
+    "Reject Request": {
+      "main": [[{ "node": "Respond Reject", "type": "main", "index": 0 }]]
+    },
+    "Cancel Request": {
+      "main": [[{ "node": "Respond Cancel", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "shifts", "createdAt": "2024-01-01T00:00:00.000Z", "updatedAt": "2024-01-01T00:00:00.000Z" },
+    { "name": "swaps", "createdAt": "2024-01-01T00:00:00.000Z", "updatedAt": "2024-01-01T00:00:00.000Z" }
+  ],
+  "triggerCount": 5,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

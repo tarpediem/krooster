@@ -12,6 +12,18 @@ export interface Restaurant {
 // Employment types
 export type EmploymentType = 'full_time' | 'part_time' | 'extra';
 export type ShiftPreference = 'morning' | 'afternoon' | 'flexible';
+export type Seniority = 'junior' | 'senior';
+
+// Seniority labels and colors
+export const SENIORITY_LABELS: Record<Seniority, string> = {
+  junior: 'Junior',
+  senior: 'Senior',
+};
+
+export const SENIORITY_COLORS: Record<Seniority, string> = {
+  junior: 'bg-blue-500',
+  senior: 'bg-amber-500',
+};
 
 // Day of week (0=Monday, 6=Sunday)
 export const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
@@ -21,8 +33,10 @@ export interface Employee {
   id: number;
   last_name: string;
   first_name: string;
+  nickname?: string; // Display name / preferred name
   phone?: string;
   email?: string;
+  avatar_url?: string; // Profile picture URL
   restaurant_id: number;
   restaurant_name?: string;
   is_mobile: boolean;
@@ -33,14 +47,17 @@ export interface Employee {
   preferred_shift?: ShiftPreference;
   employment_type: EmploymentType;
   max_hours_per_week?: number | null;
+  seniority?: Seniority;
   created_at?: string;
 }
 
 export interface CreateEmployeeData {
   last_name: string;
   first_name: string;
+  nickname?: string;
   phone?: string;
   email?: string;
+  avatar_url?: string;
   restaurant_id: number;
   is_mobile?: boolean;
   positions?: string[];
@@ -50,6 +67,7 @@ export interface CreateEmployeeData {
   preferred_shift?: ShiftPreference;
   employment_type?: EmploymentType;
   max_hours_per_week?: number | null;
+  seniority?: Seniority;
 }
 
 // Shift preference labels
@@ -271,4 +289,49 @@ export const STATUS_COLORS: Record<string, string> = {
   requested: 'bg-yellow-500',
   approved: 'bg-green-500',
   rejected: 'bg-red-500',
+};
+
+// Shift Swap Request types
+export type ShiftSwapStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface ShiftSwapRequest {
+  id: number;
+  requester_shift_id: number;
+  target_shift_id: number;
+  requester_employee_id: number;
+  requester_employee_name?: string;
+  target_employee_id: number;
+  target_employee_name?: string;
+  status: ShiftSwapStatus;
+  reason?: string;
+  approved_by?: string;
+  approval_date?: string;
+  created_at?: string;
+  // Denormalized shift info for display
+  requester_shift_date?: string;
+  requester_shift_time?: string;
+  target_shift_date?: string;
+  target_shift_time?: string;
+}
+
+export interface CreateShiftSwapData {
+  requester_shift_id: number;
+  target_shift_id: number;
+  requester_employee_id: number;
+  target_employee_id: number;
+  reason?: string;
+}
+
+export const SWAP_STATUS_LABELS: Record<ShiftSwapStatus, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+};
+
+export const SWAP_STATUS_COLORS: Record<ShiftSwapStatus, string> = {
+  pending: 'bg-yellow-500',
+  approved: 'bg-green-500',
+  rejected: 'bg-red-500',
+  cancelled: 'bg-gray-500',
 };

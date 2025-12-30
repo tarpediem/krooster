@@ -24,16 +24,20 @@ CREATE TABLE employees (
     id SERIAL PRIMARY KEY,
     last_name VARCHAR(100) NOT NULL,
     first_name VARCHAR(100),
+    nickname VARCHAR(50), -- Display name / preferred name
     phone VARCHAR(20),
     email VARCHAR(100),
+    avatar_url TEXT, -- Profile picture URL (stored locally or external)
     restaurant_id INTEGER REFERENCES restaurants(id),
     is_mobile BOOLEAN DEFAULT FALSE,
     positions TEXT[],
     active BOOLEAN DEFAULT TRUE,
     hire_date DATE,
-    fixed_day_off INTEGER CHECK (fixed_day_off BETWEEN 0 AND 6), -- 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+    days_off INTEGER[], -- Array of day indices (0=Mon, 6=Sun), e.g. {0,3} for Mon & Thu
+    preferred_shift VARCHAR(20) DEFAULT 'flexible' CHECK (preferred_shift IN ('morning', 'afternoon', 'flexible')),
     employment_type VARCHAR(20) DEFAULT 'full_time' CHECK (employment_type IN ('full_time', 'part_time', 'extra')),
     max_hours_per_week INTEGER, -- For part-time employees
+    seniority VARCHAR(10) DEFAULT 'junior' CHECK (seniority IN ('junior', 'senior')), -- Experience level
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -107,6 +111,26 @@ CREATE TABLE leave_balance (
     days_taken DECIMAL(4,1) DEFAULT 0,
     UNIQUE(employee_id, year)
 );
+
+-- Shift swap requests (employees can request to swap shifts with approval)
+CREATE TABLE shift_swap_requests (
+    id SERIAL PRIMARY KEY,
+    requester_shift_id INTEGER REFERENCES shifts(id) ON DELETE CASCADE,
+    target_shift_id INTEGER REFERENCES shifts(id) ON DELETE CASCADE,
+    requester_employee_id INTEGER REFERENCES employees(id),
+    target_employee_id INTEGER REFERENCES employees(id),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+    reason TEXT, -- Why the swap is requested
+    approved_by VARCHAR(100), -- Manager who approved/rejected
+    approval_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT different_shifts CHECK (requester_shift_id != target_shift_id),
+    CONSTRAINT different_employees CHECK (requester_employee_id != target_employee_id)
+);
+
+CREATE INDEX idx_swap_requests_status ON shift_swap_requests(status);
+CREATE INDEX idx_swap_requests_requester ON shift_swap_requests(requester_employee_id);
+CREATE INDEX idx_swap_requests_target ON shift_swap_requests(target_employee_id);
 
 -- Shift rules configuration
 CREATE TABLE shift_rules (

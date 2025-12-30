@@ -1,0 +1,92 @@
+{
+  "name": "Upload Avatar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/upload/avatar",
+        "options": {
+          "rawBody": true
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-upload",
+      "name": "Webhook Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "upload-avatar"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse multipart form data\nconst boundary = $input.first().json.headers['content-type'].split('boundary=')[1];\nconst body = $input.first().json.body;\n\n// For base64 encoded images sent as JSON\nif ($input.first().json.body && $input.first().json.body.image) {\n  const base64Data = $input.first().json.body.image;\n  const filename = $input.first().json.body.filename || `avatar_${Date.now()}.jpg`;\n  const employeeId = $input.first().json.body.employee_id || 'unknown';\n  \n  // Generate unique filename\n  const ext = filename.split('.').pop() || 'jpg';\n  const newFilename = `avatar_${employeeId}_${Date.now()}.${ext}`;\n  \n  return {\n    base64: base64Data,\n    filename: newFilename,\n    employee_id: employeeId\n  };\n}\n\nthrow new Error('No image data received');"
+      },
+      "id": "parse-upload",
+      "name": "Parse Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/avatars/{{ $json.filename }}",
+        "dataPropertyName": "base64",
+        "options": {
+          "encoding": "base64"
+        }
+      },
+      "id": "write-file",
+      "name": "Write File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const filename = $('Parse Upload').first().json.filename;\nconst employee_id = $('Parse Upload').first().json.employee_id;\n\n// Return the URL path that can be accessed\nreturn {\n  success: true,\n  url: `/avatars/${filename}`,\n  filename: filename,\n  employee_id: employee_id\n};"
+      },
+      "id": "build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1220, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Upload": {
+      "main": [[{ "node": "Parse Upload", "type": "main", "index": 0 }]]
+    },
+    "Parse Upload": {
+      "main": [[{ "node": "Write File", "type": "main", "index": 0 }]]
+    },
+    "Write File": {
+      "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]]
+    },
+    "Build Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "upload", "createdAt": "2024-01-01T00:00:00.000Z", "updatedAt": "2024-01-01T00:00:00.000Z" }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

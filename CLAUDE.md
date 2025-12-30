@@ -14,9 +14,43 @@ Two separate teams with 3-4 "mobile" employees who can perform inter-site missio
 |-----------|------------|-------------|
 | Database | PostgreSQL | Data storage |
 | Backend/Logic | n8n | Workflows and automation |
-| Local AI | Ollama (Mistral 7B) | Intelligent scheduling assistant |
-| Interface | NocoDB or Baserow | Self-hosted UI |
+| Schedule AI | Claude Agent SDK | Intelligent schedule generation |
+| AI Assistant | Cerebras API | Fast chat assistant (Kruce) |
+| Frontend | Next.js 16 + React | Modern web interface |
 | Notifications | Telegram Bot | Alerts via n8n |
+
+## Claude Agent SDK Integration
+
+The schedule generator (`agent/schedule_generator.py`) uses Claude Agent SDK to generate optimal weekly schedules.
+
+### Running the Schedule Agent
+
+```bash
+# Activate virtual environment
+source agent/venv/bin/activate
+
+# Run as CLI (generate schedule for next Monday)
+python agent/schedule_generator.py --week 2025-01-06
+
+# Run as API server
+python agent/schedule_generator.py --server --port 5679
+```
+
+### API Endpoints
+
+- `POST /api/generate-schedule` - Generate a weekly schedule
+- `GET /api/scheduling-context` - Get current employee/restaurant data
+- `GET /health` - Health check
+
+### Schedule Generation Features
+
+- **Seniority constraint**: Each shift must have at least 1 senior (SR) employee
+- **Days off**: Respects employee days off preferences
+- **Shift preferences**: Morning (AM) / Afternoon (PM) / Flexible
+- **Employment types**: Full-time, Part-time (with max hours), Extra
+- **Mobile employees**: Can work at either restaurant
+- **Missions**: Employees on mission work at destination restaurant
+- **Pending swaps**: Aware of pending shift swap requests
 
 ## Architecture
 

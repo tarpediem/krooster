@@ -10,15 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet, ArrowLeftRight } from 'lucide-react';
+import { Plus, Search, Phone, MapPin, Loader2, UserX, Upload, Download, FileSpreadsheet, ArrowLeftRight, ImagePlus, Link } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Employee, CreateEmployeeData, EmploymentType, ShiftPreference } from '@/lib/types';
+import type { Employee, CreateEmployeeData, EmploymentType, ShiftPreference, Seniority } from '@/lib/types';
 import { swapDaysOff } from '@/lib/api';
-import { DAYS_OF_WEEK, EMPLOYMENT_TYPE_LABELS, EMPLOYMENT_TYPE_COLORS, SHIFT_PREFERENCE_LABELS, SHIFT_PREFERENCE_ICONS } from '@/lib/types';
+import { DAYS_OF_WEEK, EMPLOYMENT_TYPE_LABELS, EMPLOYMENT_TYPE_COLORS, SHIFT_PREFERENCE_LABELS, SHIFT_PREFERENCE_ICONS, SENIORITY_LABELS, SENIORITY_COLORS } from '@/lib/types';
 
 const POSITIONS = ['kitchen', 'service', 'bar', 'steward', 'cashier', 'runner', 'security', 'manager'];
 const EMPLOYMENT_TYPES: EmploymentType[] = ['full_time', 'part_time', 'extra'];
 const SHIFT_PREFERENCES: ShiftPreference[] = ['morning', 'afternoon', 'flexible'];
+const SENIORITY_OPTIONS: Seniority[] = ['junior', 'senior'];
 const RESTAURANTS = [
   { id: 1, name: 'Hua Hin' },
   { id: 2, name: 'Sathorn' },
@@ -457,23 +458,38 @@ function EmployeeCard({
   onDelete: (id: number) => void;
 }) {
   const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`.toUpperCase();
+  const displayName = employee.nickname || `${employee.first_name} ${employee.last_name}`;
   const employmentType = employee.employment_type || 'full_time';
   const employmentColor = EMPLOYMENT_TYPE_COLORS[employmentType] || 'bg-gray-500';
+  const seniority = employee.seniority || 'junior';
+  const seniorityColor = SENIORITY_COLORS[seniority] || 'bg-blue-500';
 
   return (
     <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onEdit(employee)}>
       <CardContent className="pt-6">
         <div className="flex items-start gap-4">
           <Avatar className="h-14 w-14">
-            <AvatarFallback className="text-lg bg-primary text-primary-foreground">
-              {initials}
-            </AvatarFallback>
+            {employee.avatar_url ? (
+              <img src={employee.avatar_url} alt={displayName} className="h-full w-full object-cover" />
+            ) : (
+              <AvatarFallback className="text-lg bg-primary text-primary-foreground">
+                {initials}
+              </AvatarFallback>
+            )}
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold truncate">
-                {employee.first_name} {employee.last_name}
+                {employee.nickname || `${employee.first_name} ${employee.last_name}`}
               </h3>
+              {employee.nickname && (
+                <span className="text-xs text-muted-foreground">
+                  ({employee.first_name})
+                </span>
+              )}
+              <Badge className={`text-xs text-white ${seniorityColor}`}>
+                {SENIORITY_LABELS[seniority]}
+              </Badge>
               <Badge className={`text-xs text-white ${employmentColor}`}>
                 {EMPLOYMENT_TYPE_LABELS[employmentType]}
               </Badge>
@@ -534,8 +550,10 @@ function EmployeeForm({
   const [formData, setFormData] = useState<CreateEmployeeData>({
     first_name: employee?.first_name || '',
     last_name: employee?.last_name || '',
+    nickname: employee?.nickname || '',
     phone: employee?.phone || '',
     email: employee?.email || '',
+    avatar_url: employee?.avatar_url || '',
     restaurant_id: employee?.restaurant_id || 1,
     is_mobile: employee?.is_mobile || false,
     positions: employee?.positions || [],
@@ -543,6 +561,7 @@ function EmployeeForm({
     preferred_shift: employee?.preferred_shift || 'flexible',
     days_off: employee?.days_off ?? null,
     max_hours_per_week: employee?.max_hours_per_week ?? null,
+    seniority: employee?.seniority || 'junior',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -581,6 +600,16 @@ function EmployeeForm({
         </div>
       </div>
 
+      <div>
+        <Label htmlFor="nickname">Nickname (display name)</Label>
+        <Input
+          id="nickname"
+          value={formData.nickname || ''}
+          onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
+          placeholder="How they want to be called"
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="phone">Phone</Label>
@@ -598,6 +627,107 @@ function EmployeeForm({
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           />
+        </div>
+      </div>
+
+      <div>
+        <Label>Profile Picture</Label>
+        <div className="mt-2 space-y-3">
+          {/* Current avatar preview */}
+          {formData.avatar_url && (
+            <div className="flex items-center gap-3">
+              <img
+                src={formData.avatar_url}
+                alt="Preview"
+                className="w-16 h-16 rounded-full object-cover border"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-red-500"
+                onClick={() => setFormData({ ...formData, avatar_url: '' })}
+              >
+                Remove
+              </Button>
+            </div>
+          )}
+
+          {/* Upload or URL input */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label htmlFor="avatar-upload" className="cursor-pointer">
+                <div className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-muted/50 transition-colors">
+                  <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Upload photo</span>
+                </div>
+                <input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    // Convert to base64 for preview and upload
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      const base64 = event.target?.result as string;
+                      // Remove the data:image/xxx;base64, prefix for storage
+                      const base64Data = base64.split(',')[1];
+
+                      try {
+                        // Upload to n8n
+                        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/webhook';
+                        const response = await fetch(`${API_URL}/api/upload/avatar`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            image: base64Data,
+                            filename: file.name,
+                            employee_id: employee?.id || 'new'
+                          })
+                        });
+
+                        if (response.ok) {
+                          const data = await response.json();
+                          if (data.success && data.url) {
+                            // Use full URL for n8n served files
+                            const avatarUrl = `${API_URL.replace('/webhook', '')}${data.url}`;
+                            setFormData({ ...formData, avatar_url: avatarUrl });
+                            toast.success('Photo uploaded');
+                          }
+                        } else {
+                          // Fallback: use base64 directly
+                          setFormData({ ...formData, avatar_url: base64 });
+                          toast.success('Photo added (local preview)');
+                        }
+                      } catch (error) {
+                        // Fallback: use base64 directly
+                        setFormData({ ...formData, avatar_url: base64 });
+                        toast.success('Photo added (local preview)');
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </Label>
+            </div>
+          </div>
+
+          {/* URL input as alternative */}
+          <div className="flex items-center gap-2">
+            <Link className="h-4 w-4 text-muted-foreground" />
+            <Input
+              id="avatar_url"
+              value={formData.avatar_url?.startsWith('data:') ? '' : (formData.avatar_url || '')}
+              onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+              placeholder="Or paste image URL..."
+              className="text-sm"
+            />
+          </div>
         </div>
       </div>
 
@@ -627,6 +757,29 @@ function EmployeeForm({
               <option key={type} value={type}>{EMPLOYMENT_TYPE_LABELS[type]}</option>
             ))}
           </select>
+        </div>
+      </div>
+
+      <div>
+        <Label>Seniority Level</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Each shift needs at least 1 senior, preferably 2
+        </p>
+        <div className="flex gap-2">
+          {SENIORITY_OPTIONS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => setFormData({ ...formData, seniority: level })}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                formData.seniority === level
+                  ? level === 'senior' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
+                  : 'bg-muted hover:bg-muted/80'
+              }`}
+            >
+              {SENIORITY_LABELS[level]}
+            </button>
+          ))}
         </div>
       </div>
 

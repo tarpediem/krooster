@@ -37,6 +37,11 @@ services:
   # Model: mistral-krooster (16K context, GPU optimized)
   # Host service configured at: /etc/systemd/system/ollama.service.d/override.conf
 
+  # CLAUDE AGENT: Schedule generation using Claude Agent SDK
+  # Run locally: source .venv/bin/activate && python agent/schedule_generator.py --server
+  # API: http://localhost:5679/api/generate-schedule
+  # Requires: Claude Code authentication on host
+
   n8n:
     image: docker.io/n8nio/n8n:latest
     container_name: planning-n8n

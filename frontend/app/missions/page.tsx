@@ -145,17 +145,16 @@ function MissionCard({
                 <CheckCircle className="h-4 w-4" />
               </Button>
             )}
-            {(mission.status === 'proposed' || mission.status === 'refused') && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-500 hover:text-red-700"
-                onClick={() => onDelete(mission.id)}
-                disabled={isUpdating}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-500 hover:text-red-700"
+              onClick={() => onDelete(mission.id)}
+              disabled={isUpdating}
+              title="Delete mission"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </CardContent>

@@ -15,6 +15,7 @@ import type {
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/webhook';
+const SCHEDULE_PROXY = process.env.NEXT_PUBLIC_SCHEDULE_PROXY_URL || 'http://localhost:5680';
 
 async function fetchAPI<T>(
   endpoint: string,
@@ -270,16 +271,34 @@ export async function generateSchedule(
   requirements?: string,
   createShifts: boolean = false
 ): Promise<GeneratedSchedule> {
-  const result = await fetchAPI<GeneratedSchedule>('/api/ai/generate-schedule', {
+  // Use Claude Code proxy for schedule generation (no API key needed)
+  const url = `${SCHEDULE_PROXY}/api/generate-schedule`;
+
+  const response = await fetch(url, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      start_date: startDate,
-      end_date: endDate,
+      week_start: startDate,
       requirements,
-      create_shifts: createShifts,
     }),
   });
-  return result;
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(error.message || error.error || 'Schedule generation failed');
+  }
+
+  const result = await response.json();
+
+  // Parse the result from Claude proxy format
+  return {
+    success: result.success || !result.is_error,
+    shifts_created: result.shifts_created || 0,
+    period: { start: startDate, end: endDate },
+    planning: [],
+    alerts: [],
+    suggestions: [result.message || result.result || 'Schedule generated'],
+  };
 }
 
 // ============ ADMIN ============

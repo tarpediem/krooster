@@ -91,7 +91,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n  a.*,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  (a.end_date - a.start_date + 1) as days_requested,\n  COALESCE(lb.days_accrued, 0) - COALESCE(lb.days_taken, 0) as available_balance\nFROM absences a\nJOIN employees e ON a.employee_id = e.id\nLEFT JOIN leave_balance lb ON lb.employee_id = a.employee_id AND lb.year = EXTRACT(YEAR FROM CURRENT_DATE)\nWHERE a.id = {{ $json.query.id }};",
+        "query": "SELECT \n  a.*,\n  e.last_name as employee_last_name,\n  e.first_name as employee_first_name,\n  (a.end_date - a.start_date + 1) as days_requested,\n  COALESCE(lb.days_accrued, 0) - COALESCE(lb.days_taken, 0) as available_balance\nFROM absences a\nJOIN employees e ON a.employee_id = e.id\nLEFT JOIN leave_balance lb ON lb.employee_id = a.employee_id AND lb.year = EXTRACT(YEAR FROM a.start_date)\nWHERE a.id = {{ $json.query.id }};",
         "options": {}
       },
       "id": "get-leave-details",
@@ -150,7 +150,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH update_absence AS (\n  UPDATE absences \n  SET \n    status = 'approved',\n    approved_by = '{{ $json.body.approved_by || 'Manager' }}',\n    approval_date = CURRENT_TIMESTAMP\n  WHERE id = {{ $json.query.id }}\n  RETURNING *\n),\nupdate_balance AS (\n  UPDATE leave_balance \n  SET days_taken = days_taken + (\n    SELECT (end_date - start_date + 1) FROM update_absence WHERE type = 'paid_leave'\n  )\n  WHERE employee_id = (SELECT employee_id FROM update_absence)\n  AND year = EXTRACT(YEAR FROM CURRENT_DATE)\n  AND EXISTS (SELECT 1 FROM update_absence WHERE type = 'paid_leave')\n)\nSELECT * FROM update_absence;",
+        "query": "WITH update_absence AS (\n  UPDATE absences \n  SET \n    status = 'approved',\n    approved_by = '{{ $json.body.approved_by || 'Manager' }}',\n    approval_date = CURRENT_TIMESTAMP\n  WHERE id = {{ $json.query.id }}\n  RETURNING *\n),\nupdate_balance AS (\n  UPDATE leave_balance \n  SET days_taken = days_taken + (\n    SELECT (end_date - start_date + 1) FROM update_absence WHERE type = 'paid_leave'\n  )\n  WHERE employee_id = (SELECT employee_id FROM update_absence)\n  AND year = EXTRACT(YEAR FROM (SELECT start_date FROM update_absence))\n  AND EXISTS (SELECT 1 FROM update_absence WHERE type = 'paid_leave')\n)\nSELECT * FROM update_absence;",
         "options": {}
       },
       "id": "postgres-approve-leave",
@@ -170,6 +170,40 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5680/api/readjust-for-absence",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ absence_id: $json.id }) }}",
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "readjust-schedule",
+      "name": "Readjust Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        360
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const approved = $('Approve Leave').first().json;\nconst readjust = $input.first().json;\nreturn {\n  ...approved,\n  schedule_readjust: readjust.success ? readjust : { skipped: true }\n};"
+      },
+      "id": "merge-readjust-result",
+      "name": "Merge Readjust Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        360
+      ]
+    },
+    {
+      "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { success: true, message: 'Leave approved', data: $json } }}",
         "options": {}
@@ -179,7 +213,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1180,
+        1620,
         360
       ]
     },
@@ -381,14 +415,14 @@
       "main": [
         [
           {
-            "node": "If Sufficient Balance",
+            "node": "If Can Approve",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "If Sufficient Balance": {
+    "If Can Approve": {
       "main": [
         [
           {
@@ -407,6 +441,28 @@
       ]
     },
     "Approve Leave": {
+      "main": [
+        [
+          {
+            "node": "Readjust Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Readjust Schedule": {
+      "main": [
+        [
+          {
+            "node": "Merge Readjust Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Readjust Result": {
       "main": [
         [
           {
